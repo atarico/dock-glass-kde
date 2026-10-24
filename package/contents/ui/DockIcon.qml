@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // One icon as drawn in the dock's overlay: grown around its rest center from
-// its bottom edge and pushed aside by the spread.
+// its bottom edge and pushed aside by the spread, with its name in a bubble
+// above it while the pointer is on it.
 import QtQuick
 import org.kde.kirigami as Kirigami
 
@@ -15,6 +16,8 @@ Item {
     property var source
     property bool running: false
     property real hop: 0
+    property string label
+    readonly property bool hovered: dock.hoverX >= restCenter - dock.slot / 2 && dock.hoverX < restCenter + dock.slot / 2
     readonly property real offset: restCenter - dock.pointerX
     readonly property real iconScale: Magnifier.scaleAt(offset, dock.radius, dock.peak, dock.strength)
 
@@ -49,5 +52,34 @@ Item {
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
         anchors.bottomMargin: Math.max(1, dockIcon.dock.iconBottomMargin / 2 - 2.5)
+    }
+
+    Rectangle {
+        id: bubble
+
+        visible: opacity > 0
+        opacity: dockIcon.hovered && dockIcon.label !== "" ? 1 : 0
+        width: name.implicitWidth + 2 * 10
+        height: dockIcon.dock.labelHeight
+        radius: height / 2
+        color: Qt.rgba(0.11, 0.11, 0.12, 0.82)
+        anchors.horizontalCenter: parent.horizontalCenter
+        // Above the icon as drawn: grown and mid-hop.
+        y: parent.height - dockIcon.dock.iconBottomMargin - dockIcon.hop
+            - icon.height * dockIcon.iconScale - dockIcon.dock.labelGap - height
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: 100
+            }
+        }
+
+        Text {
+            id: name
+            anchors.centerIn: parent
+            text: dockIcon.label
+            color: "white"
+            font.pointSize: 10
+        }
     }
 }

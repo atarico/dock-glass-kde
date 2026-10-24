@@ -49,6 +49,8 @@ Window {
 
                 restCenter: dock.taskLeft(index) + dock.slot / 2
                 source: model.decoration
+                // The app's name; a window's display is its title.
+                label: model.AppName || model.display
                 running: model.IsWindow === true
 
                 readonly property string url: model.LauncherUrlWithoutIcon.toString()
@@ -101,12 +103,16 @@ Window {
             dock: overlay.dock
             restCenter: dock.trashLeft + dock.slot / 2
             source: dock.trashFull ? "user-trash-full" : "user-trash"
+            // Names from Plasma's own Trash and launcher widgets, which come
+            // translated; in English if a Plasma version changes them.
+            label: i18ndc("plasma_applet_org.kde.plasma.trash", "@title the name of the Trash widget", "Trash")
         }
 
         DockIcon {
             dock: overlay.dock
             restCenter: dock.launcherLeft + dock.slot / 2
             source: "start-here-kde"
+            label: i18ndc("plasma_applet_org.kde.plasma.kickoff", "@title:tab kickoff sidebar tab", "Applications")
         }
     }
 }

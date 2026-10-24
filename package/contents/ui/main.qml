@@ -37,20 +37,26 @@ PlasmoidItem {
     readonly property int bounceHeight: 22
     readonly property int bounceStepMs: 260
     readonly property int bounceTimeoutMs: 10000
+    // The bubble with the name of the icon under the pointer, above it.
+    readonly property int labelHeight: 26
+    readonly property int labelGap: 6
     // Room the overlay adds around the panel: icons spread up to
-    // (peak - 1) * radius / 2 past each end, grow (peak - 1) * iconSize up and
-    // can be mid-hop on top of that.
+    // (peak - 1) * radius / 2 past each end, grow (peak - 1) * iconSize up,
+    // can be mid-hop on top of that, and carry the name bubble.
     readonly property real sideRoom: Math.ceil((peak - 1) * radius / 2)
-    readonly property real headroom: Math.ceil((peak - 1) * iconSize) + bounceHeight
+    readonly property real headroom: Math.ceil((peak - 1) * iconSize) + bounceHeight + labelGap + labelHeight
 
     property real pointerX: 0
     property bool pointerSeeded: false
     property real strength: 0
     // Over the pill as it is drawn now, not over the room around it.
     readonly property bool active: hover.hovered && pointerInPanel >= pillLeft && pointerInPanel <= pillRight
-    // The pointer in the panel's coordinates. It comes from the window
-    // position, which stays right while this item moves under a still pointer.
-    readonly property real pointerInPanel: pill ? pill.parent.mapFromItem(null, hover.point.scenePosition.x, 0).x : -1
+    // The pointer in the panel window. It comes from the window position,
+    // which stays right while this item moves under a still pointer.
+    readonly property real pointerInPanel: hover.point.scenePosition.x
+    // The pointer on the rest layout while it is over the dock, or -1: the
+    // icon whose rest slot holds it is the one drawn under it.
+    readonly property real hoverX: active && restLeft >= 0 ? pointerInPanel - restLeft : -1
     // The rest layout, left to right: apps, a separator, then the pinned
     // file manager (its row, or -1), the Trash and the app launcher, like
     // the folders and Trash of the macOS Dock.
@@ -65,14 +71,15 @@ PlasmoidItem {
     // The most one end of the icons can spread: with the pointer at the other
     // end, at full strength. The panel keeps that much room on both sides.
     readonly property real maxGrow: Math.ceil(Magnifier.displacementAt(restWidth, radius, peak, 1))
-    // Where the rest layout's left edge is in the panel (the parent of the
-    // pill). The rest layout is centered in the panel, give or take the
-    // panel's own margins (restOffset, read once at rest), so it follows a
-    // resize at once, even while the pointer is over the dock: the panel
-    // grows when an app is pinned by dropping it there.
+    // Where the rest layout's left edge is in the panel window. The rest
+    // layout is centered in the panel, give or take the panel's own margins
+    // (restOffset, read once at rest), so it follows a resize at once, even
+    // while the pointer is over the dock: the panel grows when an app is
+    // pinned by dropping it there. It does not need the pill, so the icons
+    // show even if a Plasma version lays out its panel differently.
     property real restOffset: NaN
-    readonly property real restLeft: !pill || isNaN(restOffset) ? -1
-        : Math.round((pill.parent.width - restWidth) / 2 + restOffset)
+    readonly property real restLeft: !panelWindow || isNaN(restOffset) ? -1
+        : Math.round((panelWindow.width - restWidth) / 2 + restOffset)
     // How far the icons at each end spread; the left one is negative.
     readonly property real spreadLeft: Magnifier.displacementAt(-pointerX, radius, peak, strength)
     readonly property real spreadRight: Magnifier.displacementAt(restWidth - pointerX, radius, peak, strength)
@@ -85,13 +92,15 @@ PlasmoidItem {
     // in the panel, so moving the pill's center moves this item by as much.
     // The rest layout moves back by that, so it stays put on screen.
     readonly property real contentShift: restLeft < 0 || !pill ? 0
-        : (pillLeft + pillRight) / 2 - pill.parent.width / 2
+        : (pillLeft + pillRight) / 2 - panelWindow.width / 2
     // Where the rest layout starts in this item.
     readonly property real restStart: (width - restWidth) / 2 - contentShift
     // Plasma's panel background, which KWin blurs, and where it goes in its
-    // parent's coordinates. Found once the panel is up (findPill()).
+    // parent's coordinates. Found once the panel is up (findPill()); without
+    // it the pill keeps Plasma's own size and place.
     property Item pill: null
     property rect pillGeometry: Qt.rect(0, 0, 0, 0)
+    property int pillSearches: 0
     // Where the rest layout sits on screen: the panel window's position, which
     // Plasma sets, plus where the rest layout is in it. This item's top in
     // the window does not change while magnifying, so it is read once.
@@ -154,11 +163,17 @@ PlasmoidItem {
     }
 
     function layoutPill() {
-        if (!pill)
+        if (!pill) {
             pill = findPill();
+            // Said once, after five seconds of looking.
+            if (!pill && ++pillSearches === 20)
+                console.warn("dockglass: Plasma's panel background was not found;",
+                             "the pill will not follow the icons");
+        }
         if (!pill || restLeft < 0)
             return;
-        pillGeometry = Qt.rect(pillLeft, 0, pillRight - pillLeft, 0);
+        const left = pill.parent.mapFromItem(null, pillLeft, 0).x;
+        pillGeometry = Qt.rect(left, 0, pillRight - pillLeft, 0);
     }
 
     onPillLeftChanged: layoutPill()
@@ -463,15 +478,35 @@ PlasmoidItem {
         return -1;
     }
 
-    // Pins an app, or moves it if it is pinned already, to an app slot.
+    // A launcher URL by its desktop file name, so applications:, file: and
+    // the URLs TasksModel stores compare equal.
+    function desktopName(url) {
+        const text = url.toString();
+        return text.substring(Math.max(text.lastIndexOf("/"), text.lastIndexOf(":")) + 1);
+    }
+
+    // Pins an app, or moves it if it is pinned already, to an app slot. The
+    // order is set through the launcher list, which the dock's rows follow
+    // and which is what gets saved; TasksModel.move() moved rows by one less
+    // than asked when running apps sat out of the list's order.
     function pinApp(url, appSlot) {
         tasksModel.requestAddLauncher(url);
-        const from = tasksModel.launcherPosition(url);
+        const list = tasksModel.launcherList.slice();
+        const from = list.findIndex(launcher => desktopName(launcher) === desktopName(url));
         if (from === -1)
             return;
-        const to = fileManagerRow >= 0 && appSlot >= fileManagerRow ? appSlot + 1 : appSlot;
-        if (to !== from && tasksModel.move(from, Math.min(to, tasksModel.launcherList.length - 1)))
-            tasksModel.syncLaunchers();
+        const [launcher] = list.splice(from, 1);
+        // Before the appSlot-th app, skipping the file manager, which the dock
+        // shows in its system group.
+        let to = 0;
+        for (let apps = 0; to < list.length; ++to) {
+            if (list[to] === "preferred://filemanager")
+                continue;
+            if (apps++ === appSlot)
+                break;
+        }
+        list.splice(to, 0, launcher);
+        tasksModel.launcherList = list;
     }
 
     // Apps dropped on the dock are pinned at the slot they land on, and files
@@ -508,10 +543,10 @@ PlasmoidItem {
         running: true
         onTriggered: {
             root.layoutPill();
-            if (!root.pill || root.strength > 0)
+            if (!root.panelWindow || root.strength > 0)
                 return;
-            const rest = root.mapToItem(root.pill.parent, root.restStart, 0);
-            const reading = Qt.point(Math.round(rest.x - (root.pill.parent.width - root.restWidth) / 2),
+            const rest = root.mapToItem(null, root.restStart, 0);
+            const reading = Qt.point(Math.round(rest.x - (root.panelWindow.width - root.restWidth) / 2),
                                      Math.round(root.mapToItem(null, 0, 0).y));
             const settled = reading.x === root.pendingRest.x && reading.y === root.pendingRest.y;
             root.pendingRest = reading;
