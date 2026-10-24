@@ -15,6 +15,8 @@ import QtQuick.Layouts
 import org.kde.plasma.plasmoid
 import org.kde.plasma.core as PlasmaCore
 import org.kde.plasma.extras as PlasmaExtras
+import org.kde.plasma.plasma5support as P5Support
+import org.kde.private.desktopcontainment.folder as Folder
 import org.kde.kirigami as Kirigami
 import org.kde.layershell as LayerShell
 import org.kde.taskmanager as TaskManager
@@ -50,7 +52,17 @@ PlasmoidItem {
     // The pointer in the panel's coordinates. It comes from the window
     // position, which stays right while this item moves under a still pointer.
     readonly property real pointerInPanel: pill ? pill.parent.mapFromItem(null, hover.point.scenePosition.x, 0).x : -1
-    readonly property real restWidth: tasksModel.count * slot
+    // The rest layout, left to right: apps, a separator, then the pinned
+    // file manager (its row, or -1), the Trash and the app launcher, like
+    // the folders and Trash of the macOS Dock.
+    property int fileManagerRow: -1
+    readonly property int separatorWidth: 24
+    readonly property int appSlots: tasksModel.count - (fileManagerRow >= 0 ? 1 : 0)
+    readonly property real separatorCenter: appSlots * slot + separatorWidth / 2
+    readonly property real systemLeft: appSlots * slot + separatorWidth
+    readonly property real trashLeft: systemLeft + (fileManagerRow >= 0 ? slot : 0)
+    readonly property real launcherLeft: trashLeft + slot
+    readonly property real restWidth: launcherLeft + slot
     // The most one end of the icons can spread: with the pointer at the other
     // end, at full strength. The panel keeps that much room on both sides.
     readonly property real maxGrow: Math.ceil(Magnifier.displacementAt(restWidth, radius, peak, 1))
@@ -87,6 +99,22 @@ PlasmoidItem {
     // The task the context menu was opened for: its row, launcher URL and
     // whether it has windows and is pinned.
     property var menuTask: null
+
+    // Where a task's slot starts in the rest layout.
+    function taskLeft(row) {
+        if (row === fileManagerRow)
+            return systemLeft;
+        return (fileManagerRow >= 0 && row > fileManagerRow ? row - 1 : row) * slot;
+    }
+
+    // Launchers come first and in order, so a launcher's position is its row.
+    // launcherPosition() resolves preferred:// URLs in the list but not in its
+    // argument, so the preferred file manager is looked up by hand.
+    function updateFileManagerRow() {
+        const preferred = tasksModel.launcherList.indexOf("preferred://filemanager");
+        fileManagerRow = preferred !== -1 ? preferred
+            : tasksModel.launcherPosition("applications:org.kde.dolphin.desktop");
+    }
 
     function startBounce(url) {
         bouncing = Object.assign({}, bouncing, {[url]: Date.now()});
@@ -156,7 +184,42 @@ PlasmoidItem {
         // Pinned apps live in the widget's config, so pinning from the menu
         // survives a restart.
         Component.onCompleted: launcherList = Plasmoid.configuration.launchers
-        onLauncherListChanged: Plasmoid.configuration.launchers = launcherList
+        onLauncherListChanged: {
+            Plasmoid.configuration.launchers = launcherList;
+            root.updateFileManagerRow();
+        }
+        onCountChanged: root.updateFileManagerRow()
+    }
+
+    // Whether the Trash has anything, for its icon. FolderModel has no count
+    // property, so its rows are counted when they change.
+    property bool trashFull: false
+
+    Folder.FolderModel {
+        id: trashModel
+        url: "trash:/"
+        usedByContainment: false
+
+        function update() {
+            root.trashFull = rowCount() > 0;
+        }
+
+        onListingCompleted: update()
+        onRowsInserted: update()
+        onRowsRemoved: update()
+        onModelReset: update()
+    }
+
+    // Runs a command, here to ask Plasma for its launcher menu.
+    P5Support.DataSource {
+        id: executable
+        engine: "executable"
+        connectedSources: []
+        onNewData: sourceName => disconnectSource(sourceName)
+
+        function run(command) {
+            connectSource(command);
+        }
     }
 
     PlasmaExtras.Menu {
@@ -256,7 +319,7 @@ PlasmoidItem {
             required property int index
             required property var model
 
-            x: root.restStart + index * root.slot
+            x: root.restStart + root.taskLeft(index)
             width: root.slot
             height: root.height
 
@@ -305,6 +368,27 @@ PlasmoidItem {
         }
     }
 
+    Item {
+        x: root.restStart + root.trashLeft
+        width: root.slot
+        height: root.height
+
+        TapHandler {
+            onTapped: Qt.openUrlExternally("trash:/")
+        }
+    }
+
+    Item {
+        x: root.restStart + root.launcherLeft
+        width: root.slot
+        height: root.height
+
+        TapHandler {
+            onTapped: executable.run("dbus-send --session --type=method_call --dest=org.kde.plasmashell"
+                + " /PlasmaShell org.kde.PlasmaShell.activateLauncherMenu")
+        }
+    }
+
     // A layer-shell surface anchored to the bottom edge across the whole
     // screen width, so its position is ours to choose. It takes no input.
     // KWin puts the top layer above panels but below menus and popups; the
@@ -334,20 +418,22 @@ PlasmoidItem {
             Repeater {
                 model: tasksModel
 
-                delegate: Item {
+                delegate: DockIcon {
                     id: task
+
+                    dock: root
 
                     required property int index
                     required property var model
 
-                    readonly property real restCenter: (index + 0.5) * root.slot
-                    readonly property real offset: restCenter - root.pointerX
-                    readonly property real iconScale: Magnifier.scaleAt(offset, root.radius, root.peak, root.strength)
+                    restCenter: root.taskLeft(index) + root.slot / 2
+                    source: model.decoration
+                    running: model.IsWindow === true
+
                     readonly property string url: model.LauncherUrlWithoutIcon.toString()
                     // The launcher and the app's window rows share the URL, and
                     // a launch in place swaps one for the other.
                     readonly property bool bouncing: url in root.bouncing && model.IsWindow !== true
-                    property real hop: 0
 
                     onBouncingChanged: {
                         if (!bouncing)
@@ -376,39 +462,30 @@ PlasmoidItem {
                             easing.type: Easing.InQuad
                         }
                     }
-
-                    x: root.sideRoom + restCenter
-                        + Magnifier.displacementAt(offset, root.radius, root.peak, root.strength) - width / 2
-                    width: root.slot
-                    height: parent.height
-
-                    Kirigami.Icon {
-                        id: icon
-                        source: task.model.decoration
-                        width: root.iconSize
-                        height: root.iconSize
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.bottom: parent.bottom
-                        anchors.bottomMargin: root.iconBottomMargin + task.hop
-                        transform: Scale {
-                            origin.x: icon.width / 2
-                            origin.y: icon.height
-                            xScale: task.iconScale
-                            yScale: task.iconScale
-                        }
-                    }
-
-                    Rectangle {
-                        visible: task.model.IsWindow === true
-                        width: 5
-                        height: 5
-                        radius: 2.5
-                        color: Kirigami.Theme.textColor
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.bottom: parent.bottom
-                        anchors.bottomMargin: Math.max(1, root.iconBottomMargin / 2 - 2.5)
-                    }
                 }
+            }
+
+            // The separator moves with the spread but does not grow.
+            Rectangle {
+                width: 1
+                height: Math.round(root.height * 0.6)
+                x: root.sideRoom + root.separatorCenter - width / 2
+                    + Magnifier.displacementAt(root.separatorCenter - root.pointerX, root.radius, root.peak,
+                                               root.strength)
+                y: parent.height - root.height + (root.height - height) / 2
+                color: Qt.rgba(1, 1, 1, 0.35)
+            }
+
+            DockIcon {
+                dock: root
+                restCenter: root.trashLeft + root.slot / 2
+                source: root.trashFull ? "user-trash-full" : "user-trash"
+            }
+
+            DockIcon {
+                dock: root
+                restCenter: root.launcherLeft + root.slot / 2
+                source: "start-here-kde"
             }
         }
     }
