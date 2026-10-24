@@ -101,6 +101,17 @@ PlasmoidItem {
     // parent's coordinates. Found once the panel is up (findPill()); without
     // it the pill keeps Plasma's own size and place.
     property Item pill: null
+    // Plasma's Panel.qml root, and a hover handler on it.
+    property Item panelRoot: null
+    property var panelHover: null
+    // Plasma hides the dock's panel always (Auto hide, 1) or while a window
+    // touches it (Dodge windows, 2), until the pointer pushes against the
+    // screen edge and stays on the panel. The icons, in their own window,
+    // go with it. While the stack is open, the panel stays.
+    readonly property int panelVisibilityMode: panelWindow?.visibilityMode ?? 0
+    readonly property bool panelHidden: (panelVisibilityMode === 1
+            || (panelVisibilityMode === 2 && (panelRoot?.touchingWindow ?? false)))
+        && !(panelHover?.hovered ?? false) && !stackLoader.active
     property rect pillGeometry: Qt.rect(0, 0, 0, 0)
     property int pillSearches: 0
     // Where the rest layout sits on screen: the panel window's position, which
@@ -157,6 +168,12 @@ PlasmoidItem {
             view = view.parent;
         if (!view)
             return null;
+        if (!panelRoot) {
+            panelRoot = view;
+            // Hovering anywhere on the panel window, its margins included:
+            // after a push against the screen edge the pointer sits there.
+            panelHover = Qt.createQmlObject("import QtQuick; HoverHandler {}", view, "panelHover");
+        }
         for (const child of view.children) {
             if (child.imagePath === "widgets/panel-background" && child.anchors.fill)
                 return child.anchors.fill;
@@ -195,6 +212,8 @@ PlasmoidItem {
 
     preferredRepresentation: fullRepresentation
     Plasmoid.backgroundHints: PlasmaCore.Types.NoBackground
+    // Keeps an auto-hiding panel shown while the stack is open.
+    Plasmoid.status: stackLoader.active ? PlasmaCore.Types.NeedsAttentionStatus : PlasmaCore.Types.ActiveStatus
     Layout.preferredWidth: restWidth + 2 * maxGrow
     Layout.minimumWidth: Layout.preferredWidth
     Layout.fillHeight: true

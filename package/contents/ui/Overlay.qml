@@ -6,6 +6,7 @@
 // context menu. Panels share the top layer, so main.qml shows a fresh copy
 // whenever the panel may have been raised over it.
 import QtQuick
+import org.kde.kirigami as Kirigami
 import org.kde.layershell as LayerShell
 
 import "magnifier.mjs" as Magnifier
@@ -32,9 +33,17 @@ Window {
 
     Item {
         x: dock.restOrigin.x - dock.sideRoom
-        y: 0
+        // Slides below the screen edge while Plasma hides the panel.
+        y: dock.panelHidden ? height + Kirigami.Units.gridUnit : 0
         width: dock.restWidth + 2 * dock.sideRoom
         height: dock.height + dock.headroom
+
+        Behavior on y {
+            NumberAnimation {
+                duration: Kirigami.Units.longDuration
+                easing.type: Easing.InOutQuad
+            }
+        }
 
         Repeater {
             model: overlay.tasks
