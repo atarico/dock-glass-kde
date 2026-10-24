@@ -10,3 +10,6 @@ odd/
 
 # Build output
 dist/
+
+# KWin effect build tree
+kwin-effect/build/

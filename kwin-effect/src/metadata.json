@@ -1,0 +1,9 @@
+{
+    "KPlugin": {
+        "Category": "Appearance",
+        "Description": "The first window of an app pours out of its dock icon, like Magic Lamp restoring a window",
+        "EnabledByDefault": false,
+        "License": "GPL",
+        "Name": "Dock Glass Genie"
+    }
+}
