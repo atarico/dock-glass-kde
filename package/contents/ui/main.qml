@@ -5,9 +5,11 @@
 // has room for them to grow past the panel's height. Hover and clicks still
 // land on the panel at the rest layout: the spread keeps the point under the
 // pointer fixed, so the icon drawn under the pointer is the one whose rest
-// slot holds the pointer. While magnifying, this item widens evenly around
-// the rest layout, so the pill grows enough to hold the spread icons and the
-// rest layout stays put on screen.
+// slot holds the pointer. While the pointer is over the dock, this item is
+// wider by the most the icons can spread, evenly around the rest layout, so
+// the pill holds them and the rest layout stays put on screen. It widens in
+// one step: Plasma moves and resizes a panel in separate frames, so a pill
+// that followed the spread every frame would jitter.
 import QtQuick
 import QtQuick.Layouts
 import org.kde.plasma.plasmoid
@@ -45,19 +47,21 @@ PlasmoidItem {
     property real strength: 0
     readonly property bool active: hover.hovered
     readonly property real restWidth: tasksModel.count * slot
-    // How far each end of the pill moves out. The icons spread unevenly, but
-    // a centered panel grows the same on both sides, so both ends take the
-    // larger spread and no icon spills past the pill.
-    readonly property real grow: Math.max(
-        -Magnifier.displacementAt(-pointerX, radius, peak, strength),
-        Magnifier.displacementAt(restWidth - pointerX, radius, peak, strength))
+    // The most one end of the icons can spread: with the pointer at the other
+    // end, at full strength. A centered panel grows the same on both sides,
+    // so both ends of the pill take it.
+    readonly property real maxGrow: Math.ceil(Magnifier.displacementAt(restWidth, radius, peak, 1))
+    // Wide from the moment the pointer comes in until the icons are back at
+    // rest.
+    readonly property bool expanded: active || strength > 0
     // Where the rest layout starts in this item, from the width the panel
     // actually gave us, so it moves together with the panel.
     readonly property real restStart: Math.max(0, (width - restWidth) / 2)
     // Where the rest layout sits on screen. Wayland only tells us by mapping,
-    // so the spike polls it, and only at rest: while magnifying, the panel
-    // resizes around the rest layout every frame.
+    // so the spike polls it, only at rest and only once two readings agree,
+    // because the panel takes a few frames to settle after a resize.
     property point restOrigin: Qt.point(-1, -1)
+    property point pendingOrigin: Qt.point(-1, -1)
     // Launches still bouncing, as launcher URL -> start time in ms. Replaced
     // as a whole on every change, so bindings that read it update.
     property var bouncing: ({})
@@ -91,7 +95,7 @@ PlasmoidItem {
 
     preferredRepresentation: fullRepresentation
     Plasmoid.backgroundHints: PlasmaCore.Types.NoBackground
-    Layout.preferredWidth: restWidth + 2 * Math.ceil(grow)
+    Layout.preferredWidth: restWidth + (expanded ? 2 * maxGrow : 0)
     Layout.minimumWidth: Layout.preferredWidth
     Layout.fillHeight: true
 
@@ -354,12 +358,14 @@ PlasmoidItem {
         repeat: true
         running: true
         onTriggered: {
-            if (root.strength > 0)
+            if (root.expanded)
                 return;
             const origin = root.mapToGlobal(root.restStart, 0);
             const x = Math.round(origin.x);
             const y = Math.round(origin.y);
-            if (x !== root.restOrigin.x || y !== root.restOrigin.y) {
+            const settled = x === root.pendingOrigin.x && y === root.pendingOrigin.y;
+            root.pendingOrigin = Qt.point(x, y);
+            if (settled && (x !== root.restOrigin.x || y !== root.restOrigin.y)) {
                 root.restOrigin = Qt.point(x, y);
                 const rounded = root.restOrigin;
                 console.log("dockglass: panel item", root.width, "x", root.height, "at", rounded,
