@@ -1,0 +1,7 @@
+# Plain blur behind the glass, with no extra contrast or saturation, like
+# the original pill on Blur My Shell with tint 0.
+[ContrastEffect]
+enabled=false
+
+[AdaptiveTransparency]
+enabled=true

@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Dark, nearly opaque pill: for the panel's opaque mode, and for when
+     nothing blurs behind panels. Same shape, rim and margins as the clear
+     glass in translucent/widgets/panel-background.svg, which it is made from
+     by swapping the fill color.
+     Corners have a 32 px radius, so a 64 px panel is a full pill.
+     Each frame element sits in its own cell of a 72x72 grid (32 + 8 + 32),
+     the mask-* elements repeat the shape at x + 100 for the blur region, and
+     the hint-* elements at x >= 200 only give the content margins. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="72" viewBox="0 0 300 72">
+  <g id="topleft">
+    <path d="M0,32 A32,32 0 0 1 32,0 V32 Z" fill="#26262a" fill-opacity="0.92"/>
+    <path d="M0.5,32 A31.5,31.5 0 0 1 32,0.5" fill="none" stroke="#ffffff" stroke-opacity="0.28"/>
+  </g>
+  <g id="top">
+    <rect x="32" y="0" width="8" height="32" fill="#26262a" fill-opacity="0.92"/>
+    <rect x="32" y="0" width="8" height="1" fill="#ffffff" fill-opacity="0.28"/>
+  </g>
+  <g id="topright">
+    <path d="M40,0 A32,32 0 0 1 72,32 H40 Z" fill="#26262a" fill-opacity="0.92"/>
+    <path d="M40,0.5 A31.5,31.5 0 0 1 71.5,32" fill="none" stroke="#ffffff" stroke-opacity="0.28"/>
+  </g>
+  <g id="left">
+    <rect x="0" y="32" width="32" height="8" fill="#26262a" fill-opacity="0.92"/>
+    <rect x="0" y="32" width="1" height="8" fill="#ffffff" fill-opacity="0.28"/>
+  </g>
+  <rect id="center" x="32" y="32" width="8" height="8" fill="#26262a" fill-opacity="0.92"/>
+  <g id="right">
+    <rect x="40" y="32" width="32" height="8" fill="#26262a" fill-opacity="0.92"/>
+    <rect x="71" y="32" width="1" height="8" fill="#ffffff" fill-opacity="0.28"/>
+  </g>
+  <g id="bottomleft">
+    <path d="M32,72 A32,32 0 0 1 0,40 H32 Z" fill="#26262a" fill-opacity="0.92"/>
+    <path d="M32,71.5 A31.5,31.5 0 0 1 0.5,40" fill="none" stroke="#ffffff" stroke-opacity="0.28"/>
+  </g>
+  <g id="bottom">
+    <rect x="32" y="40" width="8" height="32" fill="#26262a" fill-opacity="0.92"/>
+    <rect x="32" y="71" width="8" height="1" fill="#ffffff" fill-opacity="0.28"/>
+  </g>
+  <g id="bottomright">
+    <path d="M72,40 A32,32 0 0 1 40,72 V40 Z" fill="#26262a" fill-opacity="0.92"/>
+    <path d="M71.5,40 A31.5,31.5 0 0 1 40,71.5" fill="none" stroke="#ffffff" stroke-opacity="0.28"/>
+  </g>
+
+  <path id="mask-topleft" d="M100,32 A32,32 0 0 1 132,0 V32 Z"/>
+  <rect id="mask-top" x="132" y="0" width="8" height="32"/>
+  <path id="mask-topright" d="M140,0 A32,32 0 0 1 172,32 H140 Z"/>
+  <rect id="mask-left" x="100" y="32" width="32" height="8"/>
+  <rect id="mask-center" x="132" y="32" width="8" height="8"/>
+  <rect id="mask-right" x="140" y="32" width="32" height="8"/>
+  <path id="mask-bottomleft" d="M132,72 A32,32 0 0 1 100,40 H132 Z"/>
+  <rect id="mask-bottom" x="132" y="40" width="8" height="32"/>
+  <path id="mask-bottomright" d="M172,40 A32,32 0 0 1 140,72 V40 Z"/>
+
+  <!-- Content margins of the frame and of its thick- variant. Without them,
+       Plasma would take the 32 px corners as margins. With these, Plasma
+       6.8.1 pads the panel's widgets by 8 px at the ends and 4 px above and
+       below, the same as with Breeze. -->
+  <rect id="hint-left-margin" x="200" y="0" width="14" height="1" fill-opacity="0"/>
+  <rect id="hint-right-margin" x="200" y="2" width="14" height="1" fill-opacity="0"/>
+  <rect id="hint-top-margin" x="216" y="0" width="1" height="4" fill-opacity="0"/>
+  <rect id="hint-bottom-margin" x="218" y="0" width="1" height="4" fill-opacity="0"/>
+  <rect id="thick-center" x="230" y="0" width="8" height="8" fill-opacity="0"/>
+  <rect id="thick-hint-left-margin" x="240" y="0" width="10" height="1" fill-opacity="0"/>
+  <rect id="thick-hint-right-margin" x="240" y="2" width="10" height="1" fill-opacity="0"/>
+  <rect id="thick-hint-top-margin" x="252" y="0" width="1" height="1" fill-opacity="0"/>
+  <rect id="thick-hint-bottom-margin" x="254" y="0" width="1" height="1" fill-opacity="0"/>
+</svg>

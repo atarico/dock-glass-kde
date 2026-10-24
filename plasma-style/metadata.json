@@ -1,0 +1,18 @@
+{
+    "KPackageStructure": "Plasma/Theme",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "atarico"
+            }
+        ],
+        "Description": "Glass pill panels for the Dock Glass widget. Everything else keeps the default Plasma style.",
+        "EnabledByDefault": true,
+        "Id": "dockglass",
+        "License": "GPL-3.0-or-later",
+        "Name": "Dock Glass",
+        "Version": "0.1",
+        "Website": "https://github.com/atarico/dock-glass"
+    },
+    "X-Plasma-API": "5.0"
+}
