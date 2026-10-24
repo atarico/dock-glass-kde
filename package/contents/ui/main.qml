@@ -5,7 +5,9 @@
 // has room for them to grow past the panel's height. Hover and clicks still
 // land on the panel at the rest layout: the spread keeps the point under the
 // pointer fixed, so the icon drawn under the pointer is the one whose rest
-// slot holds the pointer.
+// slot holds the pointer. While magnifying, this item widens evenly around
+// the rest layout, so the pill grows enough to hold the spread icons and the
+// rest layout stays put on screen.
 import QtQuick
 import QtQuick.Layouts
 import org.kde.plasma.plasmoid
@@ -35,13 +37,24 @@ PlasmoidItem {
     property bool pointerSeeded: false
     property real strength: 0
     readonly property bool active: hover.hovered
-    // Where this item sits on screen. Wayland only tells us by mapping, so the
-    // spike polls it.
-    property point panelOrigin: Qt.point(-1, -1)
+    readonly property real restWidth: tasksModel.count * slot
+    // How far each end of the pill moves out. The icons spread unevenly, but
+    // a centered panel grows the same on both sides, so both ends take the
+    // larger spread and no icon spills past the pill.
+    readonly property real grow: Math.max(
+        -Magnifier.displacementAt(-pointerX, radius, peak, strength),
+        Magnifier.displacementAt(restWidth - pointerX, radius, peak, strength))
+    // Where the rest layout starts in this item, from the width the panel
+    // actually gave us, so it moves together with the panel.
+    readonly property real restStart: Math.max(0, (width - restWidth) / 2)
+    // Where the rest layout sits on screen. Wayland only tells us by mapping,
+    // so the spike polls it, and only at rest: while magnifying, the panel
+    // resizes around the rest layout every frame.
+    property point restOrigin: Qt.point(-1, -1)
 
     preferredRepresentation: fullRepresentation
     Plasmoid.backgroundHints: PlasmaCore.Types.NoBackground
-    Layout.preferredWidth: tasksModel.count * slot
+    Layout.preferredWidth: restWidth + 2 * Math.ceil(grow)
     Layout.minimumWidth: Layout.preferredWidth
     Layout.fillHeight: true
 
@@ -70,7 +83,7 @@ PlasmoidItem {
         onTriggered: {
             const dt = Math.min(frameTime * 1000, 50);
             if (root.active) {
-                const target = hover.point.position.x;
+                const target = hover.point.position.x - root.restStart;
                 root.pointerX = root.pointerSeeded
                     ? Magnifier.approach(root.pointerX, target, dt, root.pointerSmoothingMs)
                     : target;
@@ -96,7 +109,7 @@ PlasmoidItem {
             required property int index
             required property var model
 
-            x: index * root.slot
+            x: root.restStart + index * root.slot
             width: root.slot
             height: root.height
 
@@ -129,13 +142,13 @@ PlasmoidItem {
         flags: Qt.FramelessWindowHint | Qt.WindowTransparentForInput | Qt.WindowDoesNotAcceptFocus
         color: "transparent"
         width: Screen.width
-        height: Math.max(1, Screen.height - root.panelOrigin.y + root.headroom)
-        visible: root.panelOrigin.y >= 0 && root.width > 0
+        height: Math.max(1, Screen.height - root.restOrigin.y + root.headroom)
+        visible: root.restOrigin.y >= 0 && root.restWidth > 0
 
         Item {
-            x: root.panelOrigin.x - root.sideRoom
+            x: root.restOrigin.x - root.sideRoom
             y: 0
-            width: root.width + 2 * root.sideRoom
+            width: root.restWidth + 2 * root.sideRoom
             height: root.height + root.headroom
 
             Repeater {
@@ -193,12 +206,14 @@ PlasmoidItem {
         repeat: true
         running: true
         onTriggered: {
-            const origin = root.mapToGlobal(0, 0);
+            if (root.strength > 0)
+                return;
+            const origin = root.mapToGlobal(root.restStart, 0);
             const x = Math.round(origin.x);
             const y = Math.round(origin.y);
-            if (x !== root.panelOrigin.x || y !== root.panelOrigin.y) {
-                root.panelOrigin = Qt.point(x, y);
-                const rounded = root.panelOrigin;
+            if (x !== root.restOrigin.x || y !== root.restOrigin.y) {
+                root.restOrigin = Qt.point(x, y);
+                const rounded = root.restOrigin;
                 console.log("dockglass: panel item", root.width, "x", root.height, "at", rounded,
                             "overlay", overlay.width, "x", overlay.height, "screen", overlay.Screen.height);
             }
