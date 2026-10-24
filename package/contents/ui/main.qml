@@ -21,6 +21,8 @@ import org.kde.kirigami as Kirigami
 import org.kde.taskmanager as TaskManager
 
 import "magnifier.mjs" as Magnifier
+import "places.mjs" as Places
+import "stackLayout.mjs" as StackLayout
 
 PlasmoidItem {
     id: root
@@ -246,6 +248,72 @@ PlasmoidItem {
         }
     }
 
+    // The Files stack. A click on the file manager while it has no windows
+    // fans out the places Dolphin shows, read from its bookmarks, with an
+    // entry on top that opens the file manager itself, like the original.
+    readonly property string placesFile: "$HOME/.local/share/user-places.xbel"
+
+    function toggleStack(row) {
+        if (stackLoader.active) {
+            stackLoader.item.close();
+            return;
+        }
+        stackRow = row;
+        placesReader.connectSource("cat \"" + placesFile + "\"");
+    }
+
+    function openStack(xbel) {
+        const row = stackRow;
+        const index = tasksModel.makeModelIndex(row);
+        const appName = tasksModel.data(index, TaskManager.AbstractTasksModel.AppName);
+        // System places carry English titles that KIO translates.
+        const places = Places.parsePlaces(xbel).slice(0, StackLayout.MAX_FAN_ITEMS - 1).map(place => ({
+            name: place.system ? i18ndc("kio6", "KFile System Bookmarks", place.name) : place.name,
+            icon: place.icon,
+            action: () => Qt.openUrlExternally(place.url),
+        }));
+        places.push({
+            // Translated through Dolphin's own "Open %1".
+            name: i18ndc("dolphin", "@action:inmenu Tools", "Open %1", appName),
+            icon: "folder-open",
+            action: () => {
+                tasksModel.requestActivate(index);
+                startBounce(tasksModel.data(index, TaskManager.AbstractTasksModel.LauncherUrlWithoutIcon).toString());
+            },
+        });
+        // In the stack's window, which covers the dock's screen.
+        stackOrigin = Qt.point(restOrigin.x + taskLeft(row) + slot / 2 - Screen.virtualX,
+                               restOrigin.y + height - iconBottomMargin - iconSize - Screen.virtualY);
+        stackEntries = places;
+        stackLoader.active = true;
+    }
+
+    property int stackRow: -1
+    property point stackOrigin
+    property var stackEntries: []
+
+    P5Support.DataSource {
+        id: placesReader
+        engine: "executable"
+        connectedSources: []
+        onNewData: (sourceName, data) => {
+            disconnectSource(sourceName);
+            root.openStack(data.stdout ?? "");
+        }
+    }
+
+    Loader {
+        id: stackLoader
+        active: false
+        sourceComponent: Stack {
+            screen: Qt.application.screens.find(screen => screen.name === root.Screen.name) ?? null
+            origin: root.stackOrigin
+            entries: root.stackEntries
+            visible: true
+            onClosed: stackLoader.active = false
+        }
+    }
+
     PlasmaExtras.Menu {
         id: taskMenu
 
@@ -349,6 +417,10 @@ PlasmoidItem {
 
             TapHandler {
                 onTapped: {
+                    if (hit.index === root.fileManagerRow && hit.model.IsWindow !== true) {
+                        root.toggleStack(hit.index);
+                        return;
+                    }
                     const index = tasksModel.makeModelIndex(hit.index);
                     if (hit.model.IsActive === true)
                         tasksModel.requestToggleMinimized(index);
