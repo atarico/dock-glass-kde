@@ -12,6 +12,7 @@ import QtQuick
 import QtQuick.Layouts
 import org.kde.plasma.plasmoid
 import org.kde.plasma.core as PlasmaCore
+import org.kde.plasma.extras as PlasmaExtras
 import org.kde.kirigami as Kirigami
 import org.kde.layershell as LayerShell
 import org.kde.taskmanager as TaskManager
@@ -28,10 +29,16 @@ PlasmoidItem {
     readonly property int pointerSmoothingMs: 40
     readonly property int strengthSmoothingMs: 80
     readonly property real iconBottomMargin: Math.max(0, (height - iconSize) / 2)
+    // Launch bounce, as in the original: a 22 px hop, eased out on the way up
+    // and in on the way down, repeated until the app shows a window or 10 s.
+    readonly property int bounceHeight: 22
+    readonly property int bounceStepMs: 260
+    readonly property int bounceTimeoutMs: 10000
     // Room the overlay adds around the panel: icons spread up to
-    // (peak - 1) * radius / 2 past each end and grow (peak - 1) * iconSize up.
+    // (peak - 1) * radius / 2 past each end, grow (peak - 1) * iconSize up and
+    // can be mid-hop on top of that.
     readonly property real sideRoom: Math.ceil((peak - 1) * radius / 2)
-    readonly property real headroom: Math.ceil((peak - 1) * iconSize)
+    readonly property real headroom: Math.ceil((peak - 1) * iconSize) + bounceHeight
 
     property real pointerX: 0
     property bool pointerSeeded: false
@@ -51,6 +58,36 @@ PlasmoidItem {
     // so the spike polls it, and only at rest: while magnifying, the panel
     // resizes around the rest layout every frame.
     property point restOrigin: Qt.point(-1, -1)
+    // Launches still bouncing, as launcher URL -> start time in ms. Replaced
+    // as a whole on every change, so bindings that read it update.
+    property var bouncing: ({})
+    // The task the context menu was opened for: its row, launcher URL and
+    // whether it has windows and is pinned.
+    property var menuTask: null
+
+    function startBounce(url) {
+        bouncing = Object.assign({}, bouncing, {[url]: Date.now()});
+    }
+
+    function stopBounce(url) {
+        if (!(url in bouncing))
+            return;
+        const next = Object.assign({}, bouncing);
+        delete next[url];
+        bouncing = next;
+    }
+
+    function openTaskMenu(item, row, model) {
+        const url = model.LauncherUrlWithoutIcon;
+        menuTask = {
+            row,
+            url,
+            hasWindow: model.IsWindow === true,
+            pinned: tasksModel.launcherPosition(url) !== -1,
+        };
+        taskMenu.visualParent = item;
+        taskMenu.openRelative();
+    }
 
     preferredRepresentation: fullRepresentation
     Plasmoid.backgroundHints: PlasmaCore.Types.NoBackground
@@ -66,12 +103,57 @@ PlasmoidItem {
         // launchers stay separate; with false the app jumped to the end.
         separateLaunchers: true
         launchInPlace: true
-        launcherList: [
-            "preferred://filemanager",
-            "preferred://browser",
-            "applications:org.kde.konsole.desktop",
-            "applications:systemsettings.desktop",
-        ]
+        // Pinned apps live in the widget's config, so pinning from the menu
+        // survives a restart.
+        Component.onCompleted: launcherList = Plasmoid.configuration.launchers
+        onLauncherListChanged: Plasmoid.configuration.launchers = launcherList
+    }
+
+    PlasmaExtras.Menu {
+        id: taskMenu
+
+        placement: PlasmaExtras.Menu.TopPosedLeftAlignedPopup
+
+        PlasmaExtras.MenuItem {
+            text: i18n("New Window")
+            icon: "window-new"
+            visible: root.menuTask?.hasWindow === true
+            onClicked: tasksModel.requestNewInstance(tasksModel.makeModelIndex(root.menuTask.row))
+        }
+        PlasmaExtras.MenuItem {
+            text: root.menuTask?.pinned ? i18n("Unpin from Dock") : i18n("Pin to Dock")
+            icon: root.menuTask?.pinned ? "window-unpin" : "window-pin"
+            onClicked: {
+                if (root.menuTask.pinned)
+                    tasksModel.requestRemoveLauncher(root.menuTask.url);
+                else
+                    tasksModel.requestAddLauncher(root.menuTask.url);
+            }
+        }
+        PlasmaExtras.MenuItem {
+            separator: true
+            visible: root.menuTask?.hasWindow === true
+        }
+        PlasmaExtras.MenuItem {
+            text: i18n("Close")
+            icon: "window-close"
+            visible: root.menuTask?.hasWindow === true
+            onClicked: tasksModel.requestClose(tasksModel.makeModelIndex(root.menuTask.row))
+        }
+    }
+
+    // Ends bounces whose app never showed a window.
+    Timer {
+        interval: 500
+        repeat: true
+        running: Object.keys(root.bouncing).length > 0
+        onTriggered: {
+            const now = Date.now();
+            for (const url in root.bouncing) {
+                if (now - root.bouncing[url] > root.bounceTimeoutMs)
+                    root.stopBounce(url);
+            }
+        }
     }
 
     HoverHandler {
@@ -120,6 +202,16 @@ PlasmoidItem {
                         tasksModel.requestToggleMinimized(index);
                     else
                         tasksModel.requestActivate(index);
+                    if (hit.model.IsWindow !== true)
+                        root.startBounce(hit.model.LauncherUrlWithoutIcon.toString());
+                }
+            }
+
+            TapHandler {
+                acceptedButtons: Qt.RightButton
+                onPressedChanged: {
+                    if (pressed)
+                        root.openTaskMenu(hit, hit.index, hit.model);
                 }
             }
         }
@@ -163,6 +255,39 @@ PlasmoidItem {
                     readonly property real restCenter: (index + 0.5) * root.slot
                     readonly property real offset: restCenter - root.pointerX
                     readonly property real iconScale: Magnifier.scaleAt(offset, root.radius, root.peak, root.strength)
+                    readonly property string url: model.LauncherUrlWithoutIcon.toString()
+                    // The launcher and the app's window rows share the URL, and
+                    // a launch in place swaps one for the other.
+                    readonly property bool bouncing: url in root.bouncing && model.IsWindow !== true
+                    property real hop: 0
+
+                    onBouncingChanged: {
+                        if (!bouncing)
+                            root.stopBounce(url);
+                    }
+                    // The app's window arrives as a new row, whose bouncing
+                    // starts false and never changes, so end the bounce here.
+                    Component.onCompleted: {
+                        if (model.IsWindow === true)
+                            root.stopBounce(url);
+                    }
+
+                    SequentialAnimation on hop {
+                        running: task.bouncing
+                        loops: Animation.Infinite
+                        alwaysRunToEnd: true
+
+                        NumberAnimation {
+                            to: root.bounceHeight
+                            duration: root.bounceStepMs
+                            easing.type: Easing.OutQuad
+                        }
+                        NumberAnimation {
+                            to: 0
+                            duration: root.bounceStepMs
+                            easing.type: Easing.InQuad
+                        }
+                    }
 
                     x: root.sideRoom + restCenter
                         + Magnifier.displacementAt(offset, root.radius, root.peak, root.strength) - width / 2
@@ -176,7 +301,7 @@ PlasmoidItem {
                         height: root.iconSize
                         anchors.horizontalCenter: parent.horizontalCenter
                         anchors.bottom: parent.bottom
-                        anchors.bottomMargin: root.iconBottomMargin
+                        anchors.bottomMargin: root.iconBottomMargin + task.hop
                         transform: Scale {
                             origin.x: icon.width / 2
                             origin.y: icon.height
