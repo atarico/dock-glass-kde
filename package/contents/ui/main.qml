@@ -18,7 +18,6 @@ import org.kde.plasma.extras as PlasmaExtras
 import org.kde.plasma.plasma5support as P5Support
 import org.kde.private.desktopcontainment.folder as Folder
 import org.kde.kirigami as Kirigami
-import org.kde.layershell as LayerShell
 import org.kde.taskmanager as TaskManager
 
 import "magnifier.mjs" as Magnifier
@@ -389,104 +388,105 @@ PlasmoidItem {
         }
     }
 
-    // A layer-shell surface anchored to the bottom edge across the whole
-    // screen width, so its position is ours to choose. It takes no input.
-    // KWin puts the top layer above panels but below menus and popups; the
-    // overlay layer drew the icons over the panel's own context menu.
-    Window {
-        id: overlay
+    // The icons are drawn in an Overlay window. Panels share its layer, and
+    // KWin puts a raised panel over it, which hid the icons under the pill.
+    // A newly shown window goes on top of its layer, so restackOverlay()
+    // shows a second copy and drops the first once the copy has drawn.
+    property Loader overlayFront: overlayA
+    // The copy being shown, until it has drawn its first frame.
+    property Loader overlayBack: null
 
-        LayerShell.Window.scope: "dockglass-overlay"
-        LayerShell.Window.layer: LayerShell.Window.LayerTop
-        LayerShell.Window.anchors: LayerShell.Window.AnchorBottom | LayerShell.Window.AnchorLeft
-            | LayerShell.Window.AnchorRight
-        LayerShell.Window.exclusionZone: -1
-        LayerShell.Window.keyboardInteractivity: LayerShell.Window.KeyboardInteractivityNone
+    function restackOverlay() {
+        if (overlayBack)
+            return;
+        overlayBack = overlayFront === overlayA ? overlayB : overlayA;
+        overlayBack.active = true;
+    }
 
-        flags: Qt.FramelessWindowHint | Qt.WindowTransparentForInput | Qt.WindowDoesNotAcceptFocus
-        color: "transparent"
-        width: Screen.width
-        height: Math.max(1, Screen.height - root.restOrigin.y + root.headroom)
-        visible: root.restOrigin.y >= 0 && root.restWidth > 0
+    function overlayDrawn(loader) {
+        if (loader !== overlayBack)
+            return;
+        overlayFront.active = false;
+        overlayFront = loader;
+        overlayBack = null;
+    }
 
-        Item {
-            x: root.restOrigin.x - root.sideRoom
-            y: 0
-            width: root.restWidth + 2 * root.sideRoom
-            height: root.height + root.headroom
+    Loader {
+        id: overlayA
+        active: true
+        sourceComponent: overlayComponent
+        onLoaded: item.frameSwapped.connect(() => root.overlayDrawn(overlayA))
+    }
 
-            Repeater {
-                model: tasksModel
+    Loader {
+        id: overlayB
+        active: false
+        sourceComponent: overlayComponent
+        onLoaded: item.frameSwapped.connect(() => root.overlayDrawn(overlayB))
+    }
 
-                delegate: DockIcon {
-                    id: task
+    Component {
+        id: overlayComponent
 
-                    dock: root
+        Overlay {
+            dock: root
+            tasks: tasksModel
+        }
+    }
 
-                    required property int index
-                    required property var model
+    // KWin raises the panel when it is activated, for one.
+    Connections {
+        target: root.Window.window
 
-                    restCenter: root.taskLeft(index) + root.slot / 2
-                    source: model.decoration
-                    running: model.IsWindow === true
+        function onActiveChanged() {
+            root.restackOverlay();
+        }
+    }
 
-                    readonly property string url: model.LauncherUrlWithoutIcon.toString()
-                    // The launcher and the app's window rows share the URL, and
-                    // a launch in place swaps one for the other.
-                    readonly property bool bouncing: url in root.bouncing && model.IsWindow !== true
+    // The task under a point of the rest layout, or -1.
+    function rowAt(x) {
+        for (let row = 0; row < tasksModel.count; ++row) {
+            const left = taskLeft(row);
+            if (x >= left && x < left + slot)
+                return row;
+        }
+        return -1;
+    }
 
-                    onBouncingChanged: {
-                        if (!bouncing)
-                            root.stopBounce(url);
-                    }
-                    // The app's window arrives as a new row, whose bouncing
-                    // starts false and never changes, so end the bounce here.
-                    Component.onCompleted: {
-                        if (model.IsWindow === true)
-                            root.stopBounce(url);
-                    }
+    // Pins an app, or moves it if it is pinned already, to an app slot.
+    function pinApp(url, appSlot) {
+        tasksModel.requestAddLauncher(url);
+        const from = tasksModel.launcherPosition(url);
+        if (from === -1)
+            return;
+        const to = fileManagerRow >= 0 && appSlot >= fileManagerRow ? appSlot + 1 : appSlot;
+        if (to !== from && tasksModel.move(from, Math.min(to, tasksModel.launcherList.length - 1)))
+            tasksModel.syncLaunchers();
+    }
 
-                    SequentialAnimation on hop {
-                        running: task.bouncing
-                        loops: Animation.Infinite
-                        alwaysRunToEnd: true
+    // Apps dropped on the dock are pinned at the slot they land on, and files
+    // dropped on an app open with it, like Plasma's task manager. Without
+    // this, Plasma added an icon widget to the panel next to the dock.
+    DropArea {
+        anchors.fill: parent
+        keys: ["text/uri-list"]
 
-                        NumberAnimation {
-                            to: root.bounceHeight
-                            duration: root.bounceStepMs
-                            easing.type: Easing.OutQuad
-                        }
-                        NumberAnimation {
-                            to: 0
-                            duration: root.bounceStepMs
-                            easing.type: Easing.InQuad
-                        }
-                    }
-                }
+        onDropped: drop => {
+            const x = drop.x - root.restStart;
+            const apps = drop.urls.filter(url => {
+                const text = url.toString();
+                return text.startsWith("applications:") || text.endsWith(".desktop");
+            });
+            if (apps.length > 0) {
+                const appSlot = Math.max(0, Math.min(root.appSlots, Math.round(x / root.slot)));
+                apps.forEach((url, i) => root.pinApp(url, appSlot + i));
+            } else {
+                const row = root.rowAt(x);
+                if (row !== -1)
+                    tasksModel.requestOpenUrls(tasksModel.makeModelIndex(row), drop.urls);
             }
-
-            // The separator moves with the spread but does not grow.
-            Rectangle {
-                width: 1
-                height: Math.round(root.height * 0.6)
-                x: root.sideRoom + root.separatorCenter - width / 2
-                    + Magnifier.displacementAt(root.separatorCenter - root.pointerX, root.radius, root.peak,
-                                               root.strength)
-                y: parent.height - root.height + (root.height - height) / 2
-                color: Qt.rgba(1, 1, 1, 0.35)
-            }
-
-            DockIcon {
-                dock: root
-                restCenter: root.trashLeft + root.slot / 2
-                source: root.trashFull ? "user-trash-full" : "user-trash"
-            }
-
-            DockIcon {
-                dock: root
-                restCenter: root.launcherLeft + root.slot / 2
-                source: "start-here-kde"
-            }
+            drop.accept(Qt.CopyAction);
+            root.restackOverlay();
         }
     }
 
@@ -511,8 +511,7 @@ PlasmoidItem {
             if (x !== root.restOrigin.x || y !== root.restOrigin.y) {
                 root.restOrigin = Qt.point(x, y);
                 const rounded = root.restOrigin;
-                console.log("dockglass: panel item", root.width, "x", root.height, "at", rounded,
-                            "overlay", overlay.width, "x", overlay.height, "screen", overlay.Screen.height);
+                console.log("dockglass: panel item", root.width, "x", root.height, "at", rounded);
             }
         }
     }
