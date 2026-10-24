@@ -7,11 +7,13 @@
      Corners have a 32 px radius, so a 64 px panel is a full pill.
      Each frame element sits in its own cell of a 72x72 grid (32 + 8 + 32),
      the mask-* elements repeat the shape at x + 100 for the blur region, and
-     the hint-* elements at x >= 200 only give the content margins. -->
+     the hint-* elements at x >= 200 only give the content margins. The rim
+     is a filled ring, not a stroke: Qt pads a stroke's bounds by half its
+     width, which shrank the corners into their cells and left seams. -->
 <svg xmlns="http://www.w3.org/2000/svg" width="300" height="72" viewBox="0 0 300 72">
   <g id="topleft">
     <path d="M0,32 A32,32 0 0 1 32,0 V32 Z" fill="#26262a" fill-opacity="0.92"/>
-    <path d="M0.5,32 A31.5,31.5 0 0 1 32,0.5" fill="none" stroke="#ffffff" stroke-opacity="0.28"/>
+    <path d="M0,32 A32,32 0 0 1 32,0 V1 A31,31 0 0 0 1,32 Z" fill="#ffffff" fill-opacity="0.28"/>
   </g>
   <g id="top">
     <rect x="32" y="0" width="8" height="32" fill="#26262a" fill-opacity="0.92"/>
@@ -19,7 +21,7 @@
   </g>
   <g id="topright">
     <path d="M40,0 A32,32 0 0 1 72,32 H40 Z" fill="#26262a" fill-opacity="0.92"/>
-    <path d="M40,0.5 A31.5,31.5 0 0 1 71.5,32" fill="none" stroke="#ffffff" stroke-opacity="0.28"/>
+    <path d="M40,0 A32,32 0 0 1 72,32 H71 A31,31 0 0 0 40,1 Z" fill="#ffffff" fill-opacity="0.28"/>
   </g>
   <g id="left">
     <rect x="0" y="32" width="32" height="8" fill="#26262a" fill-opacity="0.92"/>
@@ -32,7 +34,7 @@
   </g>
   <g id="bottomleft">
     <path d="M32,72 A32,32 0 0 1 0,40 H32 Z" fill="#26262a" fill-opacity="0.92"/>
-    <path d="M32,71.5 A31.5,31.5 0 0 1 0.5,40" fill="none" stroke="#ffffff" stroke-opacity="0.28"/>
+    <path d="M32,72 A32,32 0 0 1 0,40 H1 A31,31 0 0 0 32,71 Z" fill="#ffffff" fill-opacity="0.28"/>
   </g>
   <g id="bottom">
     <rect x="32" y="40" width="8" height="32" fill="#26262a" fill-opacity="0.92"/>
@@ -40,7 +42,7 @@
   </g>
   <g id="bottomright">
     <path d="M72,40 A32,32 0 0 1 40,72 V40 Z" fill="#26262a" fill-opacity="0.92"/>
-    <path d="M71.5,40 A31.5,31.5 0 0 1 40,71.5" fill="none" stroke="#ffffff" stroke-opacity="0.28"/>
+    <path d="M72,40 A32,32 0 0 1 40,72 V71 A31,31 0 0 0 71,40 Z" fill="#ffffff" fill-opacity="0.28"/>
   </g>
 
   <path id="mask-topleft" d="M100,32 A32,32 0 0 1 132,0 V32 Z"/>
