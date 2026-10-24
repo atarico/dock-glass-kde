@@ -209,9 +209,32 @@ PlasmoidItem {
 
             TapHandler {
                 acceptedButtons: Qt.RightButton
+                // Grab the press, so the panel does not open its own menu, and
+                // open ours once the grab is released, as Plasma's task
+                // manager does.
+                gesturePolicy: TapHandler.WithinBounds
                 onPressedChanged: {
                     if (pressed)
-                        root.openTaskMenu(hit, hit.index, hit.model);
+                        Qt.callLater(root.openTaskMenu, hit, hit.index, hit.model);
+                }
+            }
+
+            // Where KWin minimizes the app's windows to and restores them
+            // from: the icon at rest.
+            function publishGeometry() {
+                const origin = mapToGlobal(0, 0);
+                tasksModel.requestPublishDelegateGeometry(tasksModel.makeModelIndex(index),
+                    Qt.rect(Math.round(origin.x), Math.round(origin.y), width, height), hit);
+            }
+
+            onIndexChanged: publishGeometry()
+            Component.onCompleted: publishGeometry()
+
+            Connections {
+                target: root
+
+                function onRestOriginChanged() {
+                    hit.publishGeometry();
                 }
             }
         }
