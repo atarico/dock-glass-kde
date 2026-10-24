@@ -66,9 +66,13 @@ PlasmoidItem {
     // end, at full strength. The panel keeps that much room on both sides.
     readonly property real maxGrow: Math.ceil(Magnifier.displacementAt(restWidth, radius, peak, 1))
     // Where the rest layout's left edge is in the panel (the parent of the
-    // pill), read at rest. The panel window never moves or resizes, so this
-    // stays put.
-    property real restLeft: -1
+    // pill). The rest layout is centered in the panel, give or take the
+    // panel's own margins (restOffset, read once at rest), so it follows a
+    // resize at once, even while the pointer is over the dock: the panel
+    // grows when an app is pinned by dropping it there.
+    property real restOffset: NaN
+    readonly property real restLeft: !pill || isNaN(restOffset) ? -1
+        : Math.round((pill.parent.width - restWidth) / 2 + restOffset)
     // How far the icons at each end spread; the left one is negative.
     readonly property real spreadLeft: Magnifier.displacementAt(-pointerX, radius, peak, strength)
     readonly property real spreadRight: Magnifier.displacementAt(restWidth - pointerX, radius, peak, strength)
@@ -88,10 +92,16 @@ PlasmoidItem {
     // parent's coordinates. Found once the panel is up (findPill()).
     property Item pill: null
     property rect pillGeometry: Qt.rect(0, 0, 0, 0)
-    // Where the rest layout sits on screen. Wayland only tells us by mapping,
-    // so the spike polls it, only at rest and only once two readings agree.
-    property point restOrigin: Qt.point(-1, -1)
-    property point pendingOrigin: Qt.point(-1, -1)
+    // Where the rest layout sits on screen: the panel window's position, which
+    // Plasma sets, plus where the rest layout is in it. This item's top in
+    // the window does not change while magnifying, so it is read once.
+    readonly property var panelWindow: Window.window
+    property real restTopInWindow: -1
+    readonly property point restOrigin: !panelWindow || restLeft < 0 || restTopInWindow < 0
+        ? Qt.point(-1, -1) : Qt.point(panelWindow.x + restLeft, panelWindow.y + restTopInWindow)
+    property point pendingRest: Qt.point(-1, -1)
+
+    onRestOriginChanged: console.log("dockglass: rest layout at", restOrigin, "width", restWidth)
     // Launches still bouncing, as launcher URL -> start time in ms. Replaced
     // as a whole on every change, so bindings that read it update.
     property var bouncing: ({})
@@ -490,29 +500,27 @@ PlasmoidItem {
         }
     }
 
-    // Spike: follow the panel by polling, at rest and once two readings agree.
-    // Logs once per change for the journal.
+    // Finds the pill, and reads the panel's margins at rest, once two readings
+    // agree, since Plasma takes a few frames to lay out the panel.
     Timer {
         interval: 250
         repeat: true
         running: true
         onTriggered: {
             root.layoutPill();
-            if (!root.pill || (root.strength > 0 && root.restLeft >= 0))
+            if (!root.pill || root.strength > 0)
                 return;
-            const origin = root.mapToGlobal(root.restStart, 0);
-            const x = Math.round(origin.x);
-            const y = Math.round(origin.y);
-            const settled = x === root.pendingOrigin.x && y === root.pendingOrigin.y;
-            root.pendingOrigin = Qt.point(x, y);
+            const rest = root.mapToItem(root.pill.parent, root.restStart, 0);
+            const reading = Qt.point(Math.round(rest.x - (root.pill.parent.width - root.restWidth) / 2),
+                                     Math.round(root.mapToItem(null, 0, 0).y));
+            const settled = reading.x === root.pendingRest.x && reading.y === root.pendingRest.y;
+            root.pendingRest = reading;
             if (!settled)
                 return;
-            root.restLeft = Math.round(root.mapToItem(root.pill.parent, root.restStart, 0).x);
-            if (x !== root.restOrigin.x || y !== root.restOrigin.y) {
-                root.restOrigin = Qt.point(x, y);
-                const rounded = root.restOrigin;
-                console.log("dockglass: panel item", root.width, "x", root.height, "at", rounded);
-            }
+            if (reading.x !== root.restOffset)
+                root.restOffset = reading.x;
+            if (reading.y !== root.restTopInWindow)
+                root.restTopInWindow = reading.y;
         }
     }
 }
