@@ -22,8 +22,9 @@ struct GenieAnimation
 {
     // 1 is inside the icon, 0 is the window at its place, as in Magic Lamp.
     TimeLine timeLine;
-    // Since the window was added, while it waits for its icon geometry.
-    QElapsedTimer waiting;
+    // Since the window was added, while it waits for its icon geometry, then
+    // since the animation started.
+    QElapsedTimer clock;
     bool started = false;
 };
 
@@ -53,7 +54,9 @@ protected:
 
 private:
     void slotWindowAdded(EffectWindow *w);
+    void slotWindowClosed(EffectWindow *w);
     void slotWindowDeleted(EffectWindow *w);
+    static bool isAppWindow(EffectWindow *w);
     bool isFirstWindowOfApp(EffectWindow *w) const;
     void finish(EffectWindow *w);
 

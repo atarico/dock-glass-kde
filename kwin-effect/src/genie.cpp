@@ -15,6 +15,8 @@
 #include "genie.h"
 #include "effect/effecthandler.h"
 
+#include <KConfigGroup>
+
 using namespace std::chrono_literals;
 
 namespace KWin
@@ -23,11 +25,16 @@ namespace KWin
 // How long a new window may wait, hidden, for the dock to publish its icon
 // geometry. Without one by then, it is shown as it is.
 static constexpr qint64 s_iconWaitMs = 400;
+// Once running, how much longer than its duration an animation may take
+// before it is dropped, for a window that stopped being painted mid-way
+// (its timeline only advances while it is painted).
+static constexpr qint64 s_overrunMs = 400;
 
 GenieEffect::GenieEffect()
 {
     reconfigure(ReconfigureAll);
     connect(effects, &EffectsHandler::windowAdded, this, &GenieEffect::slotWindowAdded);
+    connect(effects, &EffectsHandler::windowClosed, this, &GenieEffect::slotWindowClosed);
     connect(effects, &EffectsHandler::windowDeleted, this, &GenieEffect::slotWindowDeleted);
 
     setVertexSnappingMode(RenderGeometry::VertexSnappingMode::None);
@@ -40,8 +47,9 @@ bool GenieEffect::supported()
 
 void GenieEffect::reconfigure(ReconfigureFlags)
 {
-    // Magic Lamp's default, so opening matches minimizing and restoring.
-    m_duration = animationTime(250ms);
+    // Magic Lamp's duration, so opening matches minimizing and restoring.
+    const int magicLampMs = KConfigGroup(effects->config(), QStringLiteral("Effect-magiclamp")).readEntry("AnimationDuration", 0);
+    m_duration = animationTime(magicLampMs != 0 ? std::chrono::milliseconds(magicLampMs) : 250ms);
 }
 
 void GenieEffect::prePaintScreen(ScreenPrePaintData &data)
@@ -60,6 +68,7 @@ void GenieEffect::prePaintWindow(RenderView *view, EffectWindow *w, WindowPrePai
         GenieAnimation &animation = *animationIt;
         if (!animation.started && w->iconGeometry().isValid()) {
             animation.started = true;
+            animation.clock.restart();
         }
         if (animation.started) {
             animation.timeLine.advance(view);
@@ -311,7 +320,10 @@ void GenieEffect::postPaintScreen()
     QList<EffectWindow *> finished;
     for (auto it = m_animations.cbegin(); it != m_animations.cend(); ++it) {
         const GenieAnimation &animation = it.value();
-        if (animation.started ? animation.timeLine.done() : animation.waiting.elapsed() > s_iconWaitMs) {
+        const bool over = animation.started
+            ? animation.timeLine.done() || animation.clock.elapsed() > m_duration.count() + s_overrunMs
+            : animation.clock.elapsed() > s_iconWaitMs;
+        if (over) {
             finished.append(it.key());
         }
     }
@@ -337,9 +349,29 @@ bool GenieEffect::isFirstWindowOfApp(EffectWindow *w) const
     return true;
 }
 
+// App windows that get a dock icon. Like Plasma's Scale effect, it leaves
+// out plasmashell's own surfaces (the dock's icon overlay among them, which
+// KWin types as a normal window) unless they are decorated, and the lock
+// screen, popups and override-redirect windows.
+bool GenieEffect::isAppWindow(EffectWindow *w)
+{
+    if (!w->isManaged() || !w->isNormalWindow() || w->isPopupWindow() || w->isLockScreen() || w->isOutline()
+        || w->isSkipSwitcher()) {
+        return false;
+    }
+    if (w->windowClass().startsWith(QLatin1String("plasmashell "))) {
+        return w->hasDecoration();
+    }
+    return true;
+}
+
 void GenieEffect::slotWindowAdded(EffectWindow *w)
 {
-    if (effects->activeFullScreenEffect() || !w->isNormalWindow() || !w->isVisible() || w->isMinimized()) {
+    if (effects->activeFullScreenEffect() || !isAppWindow(w) || !w->isVisible() || w->isMinimized()) {
+        return;
+    }
+    // Another effect already animates this window.
+    if (w->data(WindowAddedGrabRole).value<void *>()) {
         return;
     }
     if (!isFirstWindowOfApp(w)) {
@@ -350,13 +382,21 @@ void GenieEffect::slotWindowAdded(EffectWindow *w)
     w->setData(WindowAddedGrabRole, QVariant::fromValue(static_cast<void *>(this)));
 
     GenieAnimation &animation = m_animations[w];
-    animation.waiting.start();
+    animation.clock.start();
     animation.timeLine.setDirection(TimeLine::Backward);
     animation.timeLine.setDuration(m_duration);
     animation.timeLine.setEasingCurve(QEasingCurve::Linear);
 
     redirect(w);
     effects->addRepaintFull();
+}
+
+void GenieEffect::slotWindowClosed(EffectWindow *w)
+{
+    // Its icon geometry goes away with it, and Scale animates the close.
+    if (m_animations.contains(w)) {
+        finish(w);
+    }
 }
 
 void GenieEffect::slotWindowDeleted(EffectWindow *w)
@@ -368,7 +408,9 @@ void GenieEffect::finish(EffectWindow *w)
 {
     m_animations.remove(w);
     unredirect(w);
-    w->setData(WindowAddedGrabRole, QVariant());
+    if (w->data(WindowAddedGrabRole).value<void *>() == this) {
+        w->setData(WindowAddedGrabRole, QVariant());
+    }
 }
 
 bool GenieEffect::isActive() const
