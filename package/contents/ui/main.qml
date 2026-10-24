@@ -5,11 +5,11 @@
 // has room for them to grow past the panel's height. Hover and clicks still
 // land on the panel at the rest layout: the spread keeps the point under the
 // pointer fixed, so the icon drawn under the pointer is the one whose rest
-// slot holds the pointer. While the pointer is over the dock, this item is
-// wider by the most the icons can spread, evenly around the rest layout, so
-// the pill holds them and the rest layout stays put on screen. It widens in
-// one step: Plasma moves and resizes a panel in separate frames, so a pill
-// that followed the spread every frame would jitter.
+// slot holds the pointer. Plasma moves and resizes a panel in separate
+// frames, so a panel that followed the spread would jitter. Instead the panel
+// keeps the width of the widest spread, and the pill, Plasma's panel
+// background, is moved and sized inside it every frame to hug the icons, on
+// each side as far as they spread, like the original.
 import QtQuick
 import QtQuick.Layouts
 import org.kde.plasma.plasmoid
@@ -45,21 +45,40 @@ PlasmoidItem {
     property real pointerX: 0
     property bool pointerSeeded: false
     property real strength: 0
-    readonly property bool active: hover.hovered
+    // Over the pill as it is drawn now, not over the room around it.
+    readonly property bool active: hover.hovered && pointerInPanel >= pillLeft && pointerInPanel <= pillRight
+    // The pointer in the panel's coordinates. It comes from the window
+    // position, which stays right while this item moves under a still pointer.
+    readonly property real pointerInPanel: pill ? pill.parent.mapFromItem(null, hover.point.scenePosition.x, 0).x : -1
     readonly property real restWidth: tasksModel.count * slot
     // The most one end of the icons can spread: with the pointer at the other
-    // end, at full strength. A centered panel grows the same on both sides,
-    // so both ends of the pill take it.
+    // end, at full strength. The panel keeps that much room on both sides.
     readonly property real maxGrow: Math.ceil(Magnifier.displacementAt(restWidth, radius, peak, 1))
-    // Wide from the moment the pointer comes in until the icons are back at
-    // rest.
-    readonly property bool expanded: active || strength > 0
-    // Where the rest layout starts in this item, from the width the panel
-    // actually gave us, so it moves together with the panel.
-    readonly property real restStart: Math.max(0, (width - restWidth) / 2)
+    // Where the rest layout's left edge is in the panel (the parent of the
+    // pill), read at rest. The panel window never moves or resizes, so this
+    // stays put.
+    property real restLeft: -1
+    // How far the icons at each end spread; the left one is negative.
+    readonly property real spreadLeft: Magnifier.displacementAt(-pointerX, radius, peak, strength)
+    readonly property real spreadRight: Magnifier.displacementAt(restWidth - pointerX, radius, peak, strength)
+    // The pill's ends in the panel: the rest layout plus padding, pushed out
+    // by the spread at each end.
+    readonly property int pillPadding: 8
+    readonly property real pillLeft: Math.round(restLeft - pillPadding + spreadLeft)
+    readonly property real pillRight: Math.round(restLeft + restWidth + pillPadding + spreadRight)
+    // Panel.qml centers its content on the pill, whose own place is centered
+    // in the panel, so moving the pill's center moves this item by as much.
+    // The rest layout moves back by that, so it stays put on screen.
+    readonly property real contentShift: restLeft < 0 || !pill ? 0
+        : (pillLeft + pillRight) / 2 - pill.parent.width / 2
+    // Where the rest layout starts in this item.
+    readonly property real restStart: (width - restWidth) / 2 - contentShift
+    // Plasma's panel background, which KWin blurs, and where it goes in its
+    // parent's coordinates. Found once the panel is up (findPill()).
+    property Item pill: null
+    property rect pillGeometry: Qt.rect(0, 0, 0, 0)
     // Where the rest layout sits on screen. Wayland only tells us by mapping,
-    // so the spike polls it, only at rest and only once two readings agree,
-    // because the panel takes a few frames to settle after a resize.
+    // so the spike polls it, only at rest and only once two readings agree.
     property point restOrigin: Qt.point(-1, -1)
     property point pendingOrigin: Qt.point(-1, -1)
     // Launches still bouncing, as launcher URL -> start time in ms. Replaced
@@ -81,6 +100,33 @@ PlasmoidItem {
         bouncing = next;
     }
 
+    // Plasma 6's Panel.qml draws the background as a FrameSvgItem of
+    // widgets/panel-background (floatingTranslucentItem); its other background
+    // items fill that one. Its root is the item that has panelMask.
+    function findPill() {
+        let view = root.parent;
+        while (view && view.panelMask === undefined)
+            view = view.parent;
+        if (!view)
+            return null;
+        for (const child of view.children) {
+            if (child.imagePath === "widgets/panel-background" && child.anchors.fill)
+                return child.anchors.fill;
+        }
+        return null;
+    }
+
+    function layoutPill() {
+        if (!pill)
+            pill = findPill();
+        if (!pill || restLeft < 0)
+            return;
+        pillGeometry = Qt.rect(pillLeft, 0, pillRight - pillLeft, 0);
+    }
+
+    onPillLeftChanged: layoutPill()
+    onPillRightChanged: layoutPill()
+
     function openTaskMenu(item, row, model) {
         const url = model.LauncherUrlWithoutIcon;
         menuTask = {
@@ -95,7 +141,7 @@ PlasmoidItem {
 
     preferredRepresentation: fullRepresentation
     Plasmoid.backgroundHints: PlasmaCore.Types.NoBackground
-    Layout.preferredWidth: restWidth + (expanded ? 2 * maxGrow : 0)
+    Layout.preferredWidth: restWidth + 2 * maxGrow
     Layout.minimumWidth: Layout.preferredWidth
     Layout.fillHeight: true
 
@@ -164,12 +210,27 @@ PlasmoidItem {
         id: hover
     }
 
+    // Drive the pill. When this widget goes away, the Bindings hand x and
+    // width back to Panel.qml's own bindings.
+    Binding {
+        target: root.pill
+        property: "x"
+        value: root.pillGeometry.x
+        when: root.pill !== null && root.pillGeometry.width > 0
+    }
+    Binding {
+        target: root.pill
+        property: "width"
+        value: root.pillGeometry.width
+        when: root.pill !== null && root.pillGeometry.width > 0
+    }
+
     FrameAnimation {
         running: root.active || root.strength > 0
         onTriggered: {
             const dt = Math.min(frameTime * 1000, 50);
             if (root.active) {
-                const target = hover.point.position.x - root.restStart;
+                const target = root.pointerInPanel - root.restLeft;
                 root.pointerX = root.pointerSeeded
                     ? Magnifier.approach(root.pointerX, target, dt, root.pointerSmoothingMs)
                     : target;
@@ -352,20 +413,25 @@ PlasmoidItem {
         }
     }
 
-    // Spike: follow the panel by polling. Logs once per change for the journal.
+    // Spike: follow the panel by polling, at rest and once two readings agree.
+    // Logs once per change for the journal.
     Timer {
         interval: 250
         repeat: true
         running: true
         onTriggered: {
-            if (root.expanded)
+            root.layoutPill();
+            if (!root.pill || (root.strength > 0 && root.restLeft >= 0))
                 return;
             const origin = root.mapToGlobal(root.restStart, 0);
             const x = Math.round(origin.x);
             const y = Math.round(origin.y);
             const settled = x === root.pendingOrigin.x && y === root.pendingOrigin.y;
             root.pendingOrigin = Qt.point(x, y);
-            if (settled && (x !== root.restOrigin.x || y !== root.restOrigin.y)) {
+            if (!settled)
+                return;
+            root.restLeft = Math.round(root.mapToItem(root.pill.parent, root.restStart, 0).x);
+            if (x !== root.restOrigin.x || y !== root.restOrigin.y) {
                 root.restOrigin = Qt.point(x, y);
                 const rounded = root.restOrigin;
                 console.log("dockglass: panel item", root.width, "x", root.height, "at", rounded,
