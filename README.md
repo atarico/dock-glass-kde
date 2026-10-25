@@ -2,6 +2,8 @@
 
 A macOS-like dock for KDE Plasma 6: a glass pill, icons that magnify continuously and spread apart under the pointer, a launch bounce, windows that pour out of their dock icon, and a stack of places that springs out of the Files icon. It is the Plasma port of [Dock Glass](https://github.com/atarico/dock-glass), the GNOME Shell extension.
 
+**Why a Plasma version?** People on LinkedIn who saw Dock Glass asked for the same dock on a desktop other than GNOME. This port is the answer to that request.
+
 > [!NOTE]
 > **Early project.** Developed and tested on KDE neon with Plasma, KWin 6.8.1 and Qt 6.11 on Wayland, with one screen and the dock at the bottom. Values are hardcoded for now, and it is not on the KDE Store yet.
 
