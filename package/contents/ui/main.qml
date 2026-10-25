@@ -80,8 +80,8 @@ PlasmoidItem {
     // pinned by dropping it there. It does not need the pill, so the icons
     // show even if a Plasma version lays out its panel differently.
     property real restOffset: NaN
-    readonly property real restLeft: !panelWindow || isNaN(restOffset) ? -1
-        : Math.round((panelWindow.width - restWidth) / 2 + restOffset)
+    readonly property real restLeft: panelWidth < 0 || isNaN(restOffset) ? -1
+        : Math.round((panelWidth - restWidth) / 2 + restOffset)
     // How far the icons at each end spread; the left one is negative.
     readonly property real spreadLeft: Magnifier.displacementAt(-pointerX, radius, peak, strength)
     readonly property real spreadRight: Magnifier.displacementAt(restWidth - pointerX, radius, peak, strength)
@@ -94,7 +94,7 @@ PlasmoidItem {
     // in the panel, so moving the pill's center moves this item by as much.
     // The rest layout moves back by that, so it stays put on screen.
     readonly property real contentShift: restLeft < 0 || !pill ? 0
-        : (pillLeft + pillRight) / 2 - panelWindow.width / 2
+        : (pillLeft + pillRight) / 2 - panelWidth / 2
     // Where the rest layout starts in this item.
     readonly property real restStart: (width - restWidth) / 2 - contentShift
     // Plasma's panel background, which KWin blurs, and where it goes in its
@@ -108,19 +108,57 @@ PlasmoidItem {
     // touches it (Dodge windows, 2), until the pointer pushes against the
     // screen edge and stays on the panel. The icons, in their own window,
     // go with it. While the stack is open, the panel stays.
-    readonly property int panelVisibilityMode: panelWindow?.visibilityMode ?? 0
     readonly property bool panelHidden: (panelVisibilityMode === 1
             || (panelVisibilityMode === 2 && (panelRoot?.touchingWindow ?? false)))
         && !(panelHover?.hovered ?? false) && !stackLoader.active
     property rect pillGeometry: Qt.rect(0, 0, 0, 0)
     property int pillSearches: 0
+    // The panel window's place, width and visibility mode, as plain numbers
+    // that keep their last values. When Plasma tears the panel down,
+    // Window.window turns null first, and bindings on it reshaped and hid the
+    // overlay window mid-teardown, which crashed plasmashell.
+    property real panelX: 0
+    property real panelY: 0
+    property real panelWidth: -1
+    property int panelVisibilityMode: 0
+
+    function readPanelWindow() {
+        const window = Window.window;
+        if (!window)
+            return;
+        panelX = window.x;
+        panelY = window.y;
+        panelWidth = window.width;
+        panelVisibilityMode = window.visibilityMode ?? 0;
+    }
+
+    Window.onWindowChanged: readPanelWindow()
+    Component.onCompleted: readPanelWindow()
+
+    Connections {
+        target: root.Window.window
+        ignoreUnknownSignals: true
+
+        function onXChanged() {
+            root.readPanelWindow();
+        }
+        function onYChanged() {
+            root.readPanelWindow();
+        }
+        function onWidthChanged() {
+            root.readPanelWindow();
+        }
+        function onVisibilityModeChanged() {
+            root.readPanelWindow();
+        }
+    }
+
     // Where the rest layout sits on screen: the panel window's position, which
     // Plasma sets, plus where the rest layout is in it. This item's top in
     // the window does not change while magnifying, so it is read once.
-    readonly property var panelWindow: Window.window
     property real restTopInWindow: -1
-    readonly property point restOrigin: !panelWindow || restLeft < 0 || restTopInWindow < 0
-        ? Qt.point(-1, -1) : Qt.point(panelWindow.x + restLeft, panelWindow.y + restTopInWindow)
+    readonly property point restOrigin: restLeft < 0 || restTopInWindow < 0
+        ? Qt.point(-1, -1) : Qt.point(panelX + restLeft, panelY + restTopInWindow)
     property point pendingRest: Qt.point(-1, -1)
 
     onRestOriginChanged: console.log("dockglass: rest layout at", restOrigin, "width", restWidth)
@@ -634,10 +672,10 @@ PlasmoidItem {
         running: true
         onTriggered: {
             root.layoutPill();
-            if (!root.panelWindow || root.strength > 0)
+            if (!root.Window.window || root.panelWidth < 0 || root.strength > 0)
                 return;
             const rest = root.mapToItem(null, root.restStart, 0);
-            const reading = Qt.point(Math.round(rest.x - (root.panelWindow.width - root.restWidth) / 2),
+            const reading = Qt.point(Math.round(rest.x - (root.panelWidth - root.restWidth) / 2),
                                      Math.round(root.mapToItem(null, 0, 0).y));
             const settled = reading.x === root.pendingRest.x && reading.y === root.pendingRest.y;
             root.pendingRest = reading;

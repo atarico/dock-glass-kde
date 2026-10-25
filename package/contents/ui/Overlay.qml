@@ -26,12 +26,18 @@ Window {
     LayerShell.Window.keyboardInteractivity: LayerShell.Window.KeyboardInteractivityNone
 
     flags: Qt.FramelessWindowHint | Qt.WindowTransparentForInput | Qt.WindowDoesNotAcceptFocus
+    // Not a transient of the panel: Plasma never auto-hides a panel while a
+    // transient window of it is visible, and the overlay always is.
+    transientParent: null
     color: "transparent"
     width: Screen.width
     height: Math.max(1, Screen.height - dock.restOrigin.y + dock.headroom)
-    visible: dock.restOrigin.y >= 0 && dock.restWidth > 0
+    // Always shown while loaded; the content hides instead. Hiding the window
+    // from a binding crashed plasmashell when the panel was torn down.
+    visible: true
 
     Item {
+        visible: dock.restOrigin.y >= 0 && dock.restWidth > 0
         x: dock.restOrigin.x - dock.sideRoom
         // Slides below the screen edge while Plasma hides the panel.
         y: dock.panelHidden ? height + Kirigami.Units.gridUnit : 0
