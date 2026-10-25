@@ -1,78 +1,122 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
-<!-- Clear glass panel, used while KWin blurs behind panels: no tint, like
-     the original pill on Blur My Shell's Liquid Glass, only a faint fill,
-     a soft highlight over the top half and a 1 px inner rim that is brighter
-     on top, as if lit from above. Corners have a 32 px radius, so a 64 px
-     panel is a full pill.
-     Each frame element sits in its own cell of a 72x72 grid (32 + 8 + 32),
-     the mask-* elements repeat the shape at x + 100 for the blur region, and
-     the hint-* elements at x >= 200 only give the content margins. The rim
-     is a filled ring, not a stroke: Qt pads a stroke's bounds by half its
-     width, which shrank the corners into their cells and left seams. -->
-<svg xmlns="http://www.w3.org/2000/svg" width="300" height="72" viewBox="0 0 300 72">
+<!-- Clear glass panel, used while KWin blurs behind panels.
+     Written by scripts/panel-background.mjs; edit that and run it again.
+     The dock- frame has 32 px corners, so the 64 px dock is a full pill; the
+     plain frame has 16 px corners, so other panels can be as thin as 32 px.
+     The mask- elements repeat each shape 100 px to the right for the
+     blur region, and the hint- elements at x >= 200 only give margins. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="120" viewBox="0 0 300 120">
   <defs>
-    <!-- Down each top element, which is the pill's upper half. -->
+    <!-- Down each top element, which is the frame's upper half. -->
     <linearGradient id="highlight" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#ffffff" stop-opacity="0.20"/>
       <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
     </linearGradient>
   </defs>
-  <g id="topleft">
+  <g id="dock-topleft">
     <path d="M0,32 A32,32 0 0 1 32,0 V32 Z" fill="#ffffff" fill-opacity="0.06"/>
     <path d="M0,32 A32,32 0 0 1 32,0 V32 Z" fill="url(#highlight)"/>
     <path d="M0,32 A32,32 0 0 1 32,0 V1 A31,31 0 0 0 1,32 Z" fill="#ffffff" fill-opacity="0.50"/>
   </g>
-  <g id="top">
-    <rect x="32" y="0" width="8" height="32" fill="#ffffff" fill-opacity="0.06"/>
-    <rect x="32" y="0" width="8" height="32" fill="url(#highlight)"/>
-    <rect x="32" y="0" width="8" height="1" fill="#ffffff" fill-opacity="0.50"/>
+  <g id="dock-top">
+    <path d="M32,0 h8 v32 h-8 Z" fill="#ffffff" fill-opacity="0.06"/>
+    <path d="M32,0 h8 v32 h-8 Z" fill="url(#highlight)"/>
+    <path d="M32,0 h8 v1 h-8 Z" fill="#ffffff" fill-opacity="0.50"/>
   </g>
-  <g id="topright">
+  <g id="dock-topright">
     <path d="M40,0 A32,32 0 0 1 72,32 H40 Z" fill="#ffffff" fill-opacity="0.06"/>
     <path d="M40,0 A32,32 0 0 1 72,32 H40 Z" fill="url(#highlight)"/>
     <path d="M40,0 A32,32 0 0 1 72,32 H71 A31,31 0 0 0 40,1 Z" fill="#ffffff" fill-opacity="0.50"/>
   </g>
-  <g id="left">
-    <rect x="0" y="32" width="32" height="8" fill="#ffffff" fill-opacity="0.06"/>
-    <rect x="0" y="32" width="1" height="8" fill="#ffffff" fill-opacity="0.30"/>
+  <g id="dock-left">
+    <path d="M0,32 h32 v8 h-32 Z" fill="#ffffff" fill-opacity="0.06"/>
+    <path d="M0,32 h1 v8 h-1 Z" fill="#ffffff" fill-opacity="0.30"/>
   </g>
-  <rect id="center" x="32" y="32" width="8" height="8" fill="#ffffff" fill-opacity="0.06"/>
-  <g id="right">
-    <rect x="40" y="32" width="32" height="8" fill="#ffffff" fill-opacity="0.06"/>
-    <rect x="71" y="32" width="1" height="8" fill="#ffffff" fill-opacity="0.30"/>
+  <g id="dock-center">
+    <path d="M32,32 h8 v8 h-8 Z" fill="#ffffff" fill-opacity="0.06"/>
   </g>
-  <g id="bottomleft">
+  <g id="dock-right">
+    <path d="M40,32 h32 v8 h-32 Z" fill="#ffffff" fill-opacity="0.06"/>
+    <path d="M71,32 h1 v8 h-1 Z" fill="#ffffff" fill-opacity="0.30"/>
+  </g>
+  <g id="dock-bottomleft">
     <path d="M32,72 A32,32 0 0 1 0,40 H32 Z" fill="#ffffff" fill-opacity="0.06"/>
     <path d="M32,72 A32,32 0 0 1 0,40 H1 A31,31 0 0 0 32,71 Z" fill="#ffffff" fill-opacity="0.18"/>
   </g>
-  <g id="bottom">
-    <rect x="32" y="40" width="8" height="32" fill="#ffffff" fill-opacity="0.06"/>
-    <rect x="32" y="71" width="8" height="1" fill="#ffffff" fill-opacity="0.18"/>
+  <g id="dock-bottom">
+    <path d="M32,40 h8 v32 h-8 Z" fill="#ffffff" fill-opacity="0.06"/>
+    <path d="M32,71 h8 v1 h-8 Z" fill="#ffffff" fill-opacity="0.18"/>
   </g>
-  <g id="bottomright">
+  <g id="dock-bottomright">
     <path d="M72,40 A32,32 0 0 1 40,72 V40 Z" fill="#ffffff" fill-opacity="0.06"/>
     <path d="M72,40 A32,32 0 0 1 40,72 V71 A31,31 0 0 0 71,40 Z" fill="#ffffff" fill-opacity="0.18"/>
   </g>
-
-  <path id="mask-topleft" d="M100,32 A32,32 0 0 1 132,0 V32 Z"/>
-  <rect id="mask-top" x="132" y="0" width="8" height="32"/>
-  <path id="mask-topright" d="M140,0 A32,32 0 0 1 172,32 H140 Z"/>
-  <rect id="mask-left" x="100" y="32" width="32" height="8"/>
-  <rect id="mask-center" x="132" y="32" width="8" height="8"/>
-  <rect id="mask-right" x="140" y="32" width="32" height="8"/>
-  <path id="mask-bottomleft" d="M132,72 A32,32 0 0 1 100,40 H132 Z"/>
-  <rect id="mask-bottom" x="132" y="40" width="8" height="32"/>
-  <path id="mask-bottomright" d="M172,40 A32,32 0 0 1 140,72 V40 Z"/>
-
-  <!-- Content margins of the frame and of its thick- variant. Without them,
-       Plasma would take the 32 px corners as margins. With these, Plasma
-       6.8.1 pads the panel's widgets by 8 px at the ends and 4 px above and
-       below, the same as with Breeze. -->
+  <path id="mask-dock-topleft" d="M100,32 A32,32 0 0 1 132,0 V32 Z"/>
+  <path id="mask-dock-top" d="M132,0 h8 v32 h-8 Z"/>
+  <path id="mask-dock-topright" d="M140,0 A32,32 0 0 1 172,32 H140 Z"/>
+  <path id="mask-dock-left" d="M100,32 h32 v8 h-32 Z"/>
+  <path id="mask-dock-center" d="M132,32 h8 v8 h-8 Z"/>
+  <path id="mask-dock-right" d="M140,32 h32 v8 h-32 Z"/>
+  <path id="mask-dock-bottomleft" d="M132,72 A32,32 0 0 1 100,40 H132 Z"/>
+  <path id="mask-dock-bottom" d="M132,40 h8 v32 h-8 Z"/>
+  <path id="mask-dock-bottomright" d="M172,40 A32,32 0 0 1 140,72 V40 Z"/>
+  <g id="topleft">
+    <path d="M0,96 A16,16 0 0 1 16,80 V96 Z" fill="#ffffff" fill-opacity="0.06"/>
+    <path d="M0,96 A16,16 0 0 1 16,80 V96 Z" fill="url(#highlight)"/>
+    <path d="M0,96 A16,16 0 0 1 16,80 V81 A15,15 0 0 0 1,96 Z" fill="#ffffff" fill-opacity="0.50"/>
+  </g>
+  <g id="top">
+    <path d="M16,80 h8 v16 h-8 Z" fill="#ffffff" fill-opacity="0.06"/>
+    <path d="M16,80 h8 v16 h-8 Z" fill="url(#highlight)"/>
+    <path d="M16,80 h8 v1 h-8 Z" fill="#ffffff" fill-opacity="0.50"/>
+  </g>
+  <g id="topright">
+    <path d="M24,80 A16,16 0 0 1 40,96 H24 Z" fill="#ffffff" fill-opacity="0.06"/>
+    <path d="M24,80 A16,16 0 0 1 40,96 H24 Z" fill="url(#highlight)"/>
+    <path d="M24,80 A16,16 0 0 1 40,96 H39 A15,15 0 0 0 24,81 Z" fill="#ffffff" fill-opacity="0.50"/>
+  </g>
+  <g id="left">
+    <path d="M0,96 h16 v8 h-16 Z" fill="#ffffff" fill-opacity="0.06"/>
+    <path d="M0,96 h1 v8 h-1 Z" fill="#ffffff" fill-opacity="0.30"/>
+  </g>
+  <g id="center">
+    <path d="M16,96 h8 v8 h-8 Z" fill="#ffffff" fill-opacity="0.06"/>
+  </g>
+  <g id="right">
+    <path d="M24,96 h16 v8 h-16 Z" fill="#ffffff" fill-opacity="0.06"/>
+    <path d="M39,96 h1 v8 h-1 Z" fill="#ffffff" fill-opacity="0.30"/>
+  </g>
+  <g id="bottomleft">
+    <path d="M16,120 A16,16 0 0 1 0,104 H16 Z" fill="#ffffff" fill-opacity="0.06"/>
+    <path d="M16,120 A16,16 0 0 1 0,104 H1 A15,15 0 0 0 16,119 Z" fill="#ffffff" fill-opacity="0.18"/>
+  </g>
+  <g id="bottom">
+    <path d="M16,104 h8 v16 h-8 Z" fill="#ffffff" fill-opacity="0.06"/>
+    <path d="M16,119 h8 v1 h-8 Z" fill="#ffffff" fill-opacity="0.18"/>
+  </g>
+  <g id="bottomright">
+    <path d="M40,104 A16,16 0 0 1 24,120 V104 Z" fill="#ffffff" fill-opacity="0.06"/>
+    <path d="M40,104 A16,16 0 0 1 24,120 V119 A15,15 0 0 0 39,104 Z" fill="#ffffff" fill-opacity="0.18"/>
+  </g>
+  <path id="mask-topleft" d="M100,96 A16,16 0 0 1 116,80 V96 Z"/>
+  <path id="mask-top" d="M116,80 h8 v16 h-8 Z"/>
+  <path id="mask-topright" d="M124,80 A16,16 0 0 1 140,96 H124 Z"/>
+  <path id="mask-left" d="M100,96 h16 v8 h-16 Z"/>
+  <path id="mask-center" d="M116,96 h8 v8 h-8 Z"/>
+  <path id="mask-right" d="M124,96 h16 v8 h-16 Z"/>
+  <path id="mask-bottomleft" d="M116,120 A16,16 0 0 1 100,104 H116 Z"/>
+  <path id="mask-bottom" d="M116,104 h8 v16 h-8 Z"/>
+  <path id="mask-bottomright" d="M140,104 A16,16 0 0 1 124,120 V104 Z"/>
   <rect id="hint-left-margin" x="200" y="0" width="14" height="1" fill-opacity="0"/>
   <rect id="hint-right-margin" x="200" y="2" width="14" height="1" fill-opacity="0"/>
   <rect id="hint-top-margin" x="216" y="0" width="1" height="4" fill-opacity="0"/>
   <rect id="hint-bottom-margin" x="218" y="0" width="1" height="4" fill-opacity="0"/>
+  <rect id="dock-hint-left-margin" x="200" y="10" width="14" height="1" fill-opacity="0"/>
+  <rect id="dock-hint-right-margin" x="200" y="12" width="14" height="1" fill-opacity="0"/>
+  <rect id="dock-hint-top-margin" x="216" y="10" width="1" height="4" fill-opacity="0"/>
+  <rect id="dock-hint-bottom-margin" x="218" y="10" width="1" height="4" fill-opacity="0"/>
+  <!-- Plasma pads a panel's widgets with the thick- margins. -->
   <rect id="thick-center" x="230" y="0" width="8" height="8" fill-opacity="0"/>
   <rect id="thick-hint-left-margin" x="240" y="0" width="10" height="1" fill-opacity="0"/>
   <rect id="thick-hint-right-margin" x="240" y="2" width="10" height="1" fill-opacity="0"/>

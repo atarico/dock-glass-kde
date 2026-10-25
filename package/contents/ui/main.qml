@@ -103,6 +103,13 @@ PlasmoidItem {
     property Item pill: null
     // Plasma's Panel.qml root, and a hover handler on it.
     property Item panelRoot: null
+    // Panel.qml's background frames, set to the style's dock frame.
+    property var panelFrames: []
+
+    Component.onDestruction: {
+        for (const frame of panelFrames)
+            frame.prefix = "";
+    }
     property var panelHover: null
     // Whether the pointer is on the panel, as Plasma counts it: at once when
     // it comes in, 50 ms after it leaves, like PanelView's unhide timer, so
@@ -257,6 +264,15 @@ PlasmoidItem {
             // Hovering anywhere on the panel window, its margins included:
             // after a push against the screen edge the pointer sits there.
             panelHover = Qt.createQmlObject("import QtQuick; HoverHandler {}", view, "panelHover");
+            // The dock's own frame in the Dock Glass style, a full pill; the
+            // style's plain frame has smaller corners so other panels can be
+            // thin. Other styles fall back to their only frame.
+            for (const child of view.children) {
+                if (String(child.imagePath).endsWith("widgets/panel-background")) {
+                    child.prefix = ["dock", ""];
+                    panelFrames.push(child);
+                }
+            }
         }
         for (const child of view.children) {
             if (child.imagePath === "widgets/panel-background" && child.anchors.fill)
