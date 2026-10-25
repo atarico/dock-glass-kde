@@ -39,15 +39,18 @@ Window {
     Item {
         visible: dock.restOrigin.y >= 0 && dock.restWidth > 0
         x: dock.restOrigin.x - dock.sideRoom
-        // Slides below the screen edge while Plasma hides the panel.
-        y: dock.panelHidden ? height + Kirigami.Units.gridUnit : 0
+        // Slides below the screen edge while Plasma hides the panel, as far
+        // and as fast as KWin slides the panel (Sliding Popups: its height,
+        // 200 ms scaled by the animation speed, OutCubic), so the pill and
+        // the icons move together.
+        y: dock.panelHidden ? dock.panelHeight : 0
         width: dock.restWidth + 2 * dock.sideRoom
         height: dock.height + dock.headroom
 
         Behavior on y {
             NumberAnimation {
                 duration: Kirigami.Units.longDuration
-                easing.type: Easing.InOutQuad
+                easing.type: Easing.OutCubic
             }
         }
 

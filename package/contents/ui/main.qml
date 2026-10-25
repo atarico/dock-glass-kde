@@ -108,9 +108,12 @@ PlasmoidItem {
     // touches it (Dodge windows, 2), until the pointer pushes against the
     // screen edge and stays on the panel. The icons, in their own window,
     // go with it. While the stack is open, the panel stays.
+    // Like Plasma, which keeps the panel up while a menu of it is open: the
+    // pointer is on the menu then, not on the panel.
     readonly property bool panelHidden: (panelVisibilityMode === 1
             || (panelVisibilityMode === 2 && (panelRoot?.touchingWindow ?? false)))
         && !(panelHover?.hovered ?? false) && !stackLoader.active
+        && taskMenu.status === PlasmaExtras.Menu.Closed
     property rect pillGeometry: Qt.rect(0, 0, 0, 0)
     property int pillSearches: 0
     // The panel window's place, width and visibility mode, as plain numbers
@@ -120,6 +123,7 @@ PlasmoidItem {
     property real panelX: 0
     property real panelY: 0
     property real panelWidth: -1
+    property real panelHeight: 0
     property int panelVisibilityMode: 0
 
     function readPanelWindow() {
@@ -129,6 +133,7 @@ PlasmoidItem {
         panelX = window.x;
         panelY = window.y;
         panelWidth = window.width;
+        panelHeight = window.height;
         panelVisibilityMode = window.visibilityMode ?? 0;
     }
 
@@ -143,6 +148,9 @@ PlasmoidItem {
             root.readPanelWindow();
         }
         function onYChanged() {
+            root.readPanelWindow();
+        }
+        function onHeightChanged() {
             root.readPanelWindow();
         }
         function onWidthChanged() {
@@ -170,13 +178,10 @@ PlasmoidItem {
     }
     // The overlay window is shown as soon as it loads, which can be before
     // Plasma shows the panels, and then the panels sit over it. Once the dock
-    // has its place, a fresh copy goes on top; and again whenever Plasma
-    // shows an auto-hidden panel, in case it went over the icons.
+    // has its place, a fresh copy goes on top. Hiding and showing the panel
+    // keeps the order, so it is not restacked then: a fresh copy would pop in
+    // late instead of sliding with the pill.
     property bool overlayStacked: false
-    onPanelHiddenChanged: {
-        if (!panelHidden)
-            restackOverlay();
-    }
 
     Timer {
         id: firstRestack
