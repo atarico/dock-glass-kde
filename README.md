@@ -22,10 +22,12 @@ A macOS-like dock for KDE Plasma 6: a glass pill, icons that magnify continuousl
 
 ## Install
 
-Dock Glass has three parts: the **widget** that draws the dock, the **Plasma Style** that makes its panel a glass pill, and optional **KWin effects** for the glass and the genie. From a clone of this repository:
+Dock Glass has three parts: the **widget** that draws the dock, the **Plasma Style** that makes its panel a glass pill, and optional **KWin effects** for the glass and the genie.
 
-1. Install the widget and the style:
+1. Clone the repository and install the widget and the style:
    ```sh
+   git clone https://github.com/atarico/dock-glass-kde.git
+   cd dock-glass-kde
    kpackagetool6 -t Plasma/Applet -i package
    kpackagetool6 -t Plasma/Theme -i plasma-style
    ```
@@ -45,7 +47,7 @@ Dock Glass has three parts: the **widget** that draws the dock, the **Plasma Sty
 5. If your old panel is still at the bottom, move it to the top, and remove its **Icons-only Task Manager** or **Task Manager**: otherwise minimizing animates toward it instead of the dock.
 6. Move the pointer over the dock: the icon under it grows above the pill and its neighbors spread apart.
 
-To update, run `git pull` and the same two commands with `-u` instead of `-i`, then `systemctl --user restart plasma-plasmashell`. To uninstall, remove the panel and run `kpackagetool6 -t Plasma/Applet -r io.github.atarico.dockglass` and `kpackagetool6 -t Plasma/Theme -r dockglass`.
+To update, run `git pull` and the same two `kpackagetool6` commands with `-u` instead of `-i`, then `systemctl --user restart plasma-plasmashell`. To uninstall, remove the panel and run `kpackagetool6 -t Plasma/Applet -r io.github.atarico.dockglass` and `kpackagetool6 -t Plasma/Theme -r dockglass`.
 
 ## Recommended setup
 
@@ -121,7 +123,8 @@ For a clean top bar like Ubuntu's or macOS's, set the top panel to **Not floatin
 |-----------|--------|
 | Plasma 6.8 (KWin 6.8, Qt 6.11) | Tested on KDE neon, Wayland |
 | Plasma 6.0 to 6.7 | Not tested |
-| X11 | Not tested |
+| Plasma 5 | Not supported: the widget is written for Plasma 6 |
+| X11 | Not supported: the icons are drawn in a Wayland layer-shell window |
 | Dock position | Bottom only |
 | Screens | One; several screens are not handled yet |
 | Glass effect | Third-party; the fork above is the one tested on Plasma 6.8 |

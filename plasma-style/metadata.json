@@ -12,7 +12,7 @@
         "License": "GPL-3.0-or-later",
         "Name": "Dock Glass",
         "Version": "0.1",
-        "Website": "https://github.com/atarico/dock-glass"
+        "Website": "https://github.com/atarico/dock-glass-kde"
     },
     "X-Plasma-API": "5.0"
 }
