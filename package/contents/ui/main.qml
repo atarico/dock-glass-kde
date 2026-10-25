@@ -161,7 +161,28 @@ PlasmoidItem {
         ? Qt.point(-1, -1) : Qt.point(panelX + restLeft, panelY + restTopInWindow)
     property point pendingRest: Qt.point(-1, -1)
 
-    onRestOriginChanged: console.log("dockglass: rest layout at", restOrigin, "width", restWidth)
+    onRestOriginChanged: {
+        console.log("dockglass: rest layout at", restOrigin, "width", restWidth);
+        if (!overlayStacked && restOrigin.y >= 0) {
+            overlayStacked = true;
+            firstRestack.start();
+        }
+    }
+    // The overlay window is shown as soon as it loads, which can be before
+    // Plasma shows the panels, and then the panels sit over it. Once the dock
+    // has its place, a fresh copy goes on top; and again whenever Plasma
+    // shows an auto-hidden panel, in case it went over the icons.
+    property bool overlayStacked: false
+    onPanelHiddenChanged: {
+        if (!panelHidden)
+            restackOverlay();
+    }
+
+    Timer {
+        id: firstRestack
+        interval: 300
+        onTriggered: root.restackOverlay()
+    }
     // Launches still bouncing, as launcher URL -> start time in ms. Replaced
     // as a whole on every change, so bindings that read it update.
     property var bouncing: ({})
