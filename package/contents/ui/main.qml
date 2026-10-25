@@ -104,6 +104,26 @@ PlasmoidItem {
     // Plasma's Panel.qml root, and a hover handler on it.
     property Item panelRoot: null
     property var panelHover: null
+    // Whether the pointer is on the panel, as Plasma counts it: at once when
+    // it comes in, 50 ms after it leaves, like PanelView's unhide timer, so
+    // the icons start hiding when the pill does.
+    property bool pointerOnPanel: false
+    readonly property bool panelHovered: panelHover?.hovered ?? false
+
+    onPanelHoveredChanged: {
+        if (panelHovered) {
+            pointerLeaveTimer.stop();
+            pointerOnPanel = true;
+        } else {
+            pointerLeaveTimer.restart();
+        }
+    }
+
+    Timer {
+        id: pointerLeaveTimer
+        interval: 50
+        onTriggered: root.pointerOnPanel = false
+    }
     // Plasma hides the dock's panel always (Auto hide, 1) or while a window
     // touches it (Dodge windows, 2), until the pointer pushes against the
     // screen edge and stays on the panel. The icons, in their own window,
@@ -112,7 +132,7 @@ PlasmoidItem {
     // pointer is on the menu then, not on the panel.
     readonly property bool panelHidden: (panelVisibilityMode === 1
             || (panelVisibilityMode === 2 && (panelRoot?.touchingWindow ?? false)))
-        && !(panelHover?.hovered ?? false) && !stackLoader.active
+        && !pointerOnPanel && !stackLoader.active
         && taskMenu.status === PlasmaExtras.Menu.Closed
     property rect pillGeometry: Qt.rect(0, 0, 0, 0)
     property int pillSearches: 0

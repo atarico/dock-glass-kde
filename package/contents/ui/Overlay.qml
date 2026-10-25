@@ -37,22 +37,50 @@ Window {
     visible: true
 
     Item {
+        id: content
+
         visible: dock.restOrigin.y >= 0 && dock.restWidth > 0
         x: dock.restOrigin.x - dock.sideRoom
         // Slides below the screen edge while Plasma hides the panel, as far
-        // and as fast as KWin slides the panel (Sliding Popups: its height,
-        // 200 ms scaled by the animation speed, OutCubic), so the pill and
-        // the icons move together.
-        y: dock.panelHidden ? dock.panelHeight : 0
+        // and as fast as KWin slides the panel, so the pill and the icons
+        // move together. KWin's Sliding Popups moves the panel by its height
+        // in 200 ms scaled by the animation speed, on an OutCubic timeline
+        // that runs forward to show it and backward to hide it: fast first
+        // when it comes in, fast last when it goes out (InCubic).
+        y: 0
         width: dock.restWidth + 2 * dock.sideRoom
         height: dock.height + dock.headroom
 
-        Behavior on y {
-            NumberAnimation {
-                duration: Kirigami.Units.longDuration
-                easing.type: Easing.OutCubic
+        states: State {
+            name: "hidden"
+            when: dock.panelHidden
+
+            PropertyChanges {
+                target: content
+                y: dock.panelHeight
             }
         }
+
+        transitions: [
+            Transition {
+                to: "hidden"
+
+                NumberAnimation {
+                    property: "y"
+                    duration: Kirigami.Units.longDuration
+                    easing.type: Easing.InCubic
+                }
+            },
+            Transition {
+                from: "hidden"
+
+                NumberAnimation {
+                    property: "y"
+                    duration: Kirigami.Units.longDuration
+                    easing.type: Easing.OutCubic
+                }
+            }
+        ]
 
         Repeater {
             model: overlay.tasks
