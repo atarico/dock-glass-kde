@@ -23,6 +23,7 @@ import org.kde.taskmanager as TaskManager
 import "magnifier.mjs" as Magnifier
 import "places.mjs" as Places
 import "stackLayout.mjs" as StackLayout
+import "windows.mjs" as Windows
 
 PlasmoidItem {
     id: root
@@ -310,6 +311,25 @@ PlasmoidItem {
         taskMenu.openRelative();
     }
 
+    // An app with several windows is one group row. TasksModel ignores a
+    // request to activate it, and minimizes all its windows when asked to
+    // toggle it, so a click goes to one of the windows instead.
+    function activateGroup(row) {
+        const windows = [];
+        for (let i = 0; i < tasksModel.rowCount(tasksModel.makeModelIndex(row)); ++i) {
+            const index = tasksModel.makeModelIndex(row, i);
+            windows.push({
+                active: tasksModel.data(index, TaskManager.AbstractTasksModel.IsActive) === true,
+                // A Date, or undefined for a window that was never in front.
+                lastActivated: Number(tasksModel.data(index, TaskManager.AbstractTasksModel.LastActivated) ?? NaN),
+                stacking: tasksModel.data(index, TaskManager.AbstractTasksModel.StackingOrder),
+            });
+        }
+        const next = Windows.windowToActivate(windows);
+        if (next !== -1)
+            tasksModel.requestActivate(tasksModel.makeModelIndex(row, next));
+    }
+
     preferredRepresentation: fullRepresentation
     Plasmoid.backgroundHints: PlasmaCore.Types.NoBackground
     // Keeps an auto-hiding panel shown while the stack is open.
@@ -538,6 +558,10 @@ PlasmoidItem {
                 onTapped: {
                     if (hit.index === root.fileManagerRow && hit.model.IsWindow !== true) {
                         root.toggleStack(hit.index);
+                        return;
+                    }
+                    if (hit.model.IsGroupParent === true) {
+                        root.activateGroup(hit.index);
                         return;
                     }
                     const index = tasksModel.makeModelIndex(hit.index);
