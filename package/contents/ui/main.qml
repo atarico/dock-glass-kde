@@ -165,6 +165,15 @@ PlasmoidItem {
         panelVisibilityMode = window.visibilityMode ?? 0;
     }
 
+    // When the panel grows or shrinks, Plasma moves it up to 30 ms before it
+    // resizes it. With the new place and the old width the icons jumped by
+    // half a slot, so a move alone waits for the resize, which reads both.
+    Timer {
+        id: panelMoveTimer
+        interval: 100
+        onTriggered: root.readPanelWindow()
+    }
+
     Window.onWindowChanged: readPanelWindow()
     Component.onCompleted: readPanelWindow()
 
@@ -173,7 +182,7 @@ PlasmoidItem {
         ignoreUnknownSignals: true
 
         function onXChanged() {
-            root.readPanelWindow();
+            panelMoveTimer.restart();
         }
         function onYChanged() {
             root.readPanelWindow();
