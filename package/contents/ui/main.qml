@@ -601,6 +601,10 @@ PlasmoidItem {
                     Qt.rect(Math.round(origin.x), Math.round(origin.y), width, height), hit);
             }
 
+            // A window that joins the app's group has no such place yet.
+            readonly property int windowCount: model.ChildCount ?? 0
+
+            onWindowCountChanged: publishGeometry()
             onIndexChanged: publishGeometry()
             Component.onCompleted: publishGeometry()
 
