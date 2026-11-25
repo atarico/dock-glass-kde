@@ -21,6 +21,7 @@ A macOS-like dock for KDE Plasma 6: a glass pill, icons that magnify continuousl
 | Pinning | Drag an app from the menu onto the dock to pin it where you drop it. Right-click an icon to open a new window, pin or unpin it, or close its windows |
 | Hiding | Set to Dodge Windows, the dock hides while a window touches it and comes back when you push the pointer against the bottom edge |
 | Running dot | One small dot under each open app |
+| Several windows | A click on an app with several windows goes to the one used last, and each further click to the next |
 
 ## Install
 
@@ -164,6 +165,7 @@ For a clean top bar like Ubuntu's or macOS's, set the top panel to **Not floatin
 | `package/contents/ui/magnifier.mjs` | Pure magnification math, from the original |
 | `package/contents/ui/stackLayout.mjs` | Pure stack layout math, from the original |
 | `package/contents/ui/places.mjs` | Reads the places from Dolphin's bookmarks |
+| `package/contents/ui/windows.mjs` | Which window a click on an app with several goes to |
 | `plasma-style/` | The Dock Glass Plasma Style |
 | `kwin-effect/` | The Dock Glass Genie KWin effect |
 | `scripts/panel-background.mjs` | Writes the style's panel backgrounds |

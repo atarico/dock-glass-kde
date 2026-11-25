@@ -23,6 +23,7 @@ import org.kde.taskmanager as TaskManager
 import "magnifier.mjs" as Magnifier
 import "places.mjs" as Places
 import "stackLayout.mjs" as StackLayout
+import "windows.mjs" as Windows
 
 PlasmoidItem {
     id: root
@@ -164,6 +165,15 @@ PlasmoidItem {
         panelVisibilityMode = window.visibilityMode ?? 0;
     }
 
+    // When the panel grows or shrinks, Plasma moves it up to 30 ms before it
+    // resizes it. With the new place and the old width the icons jumped by
+    // half a slot, so a move alone waits for the resize, which reads both.
+    Timer {
+        id: panelMoveTimer
+        interval: 100
+        onTriggered: root.readPanelWindow()
+    }
+
     Window.onWindowChanged: readPanelWindow()
     Component.onCompleted: readPanelWindow()
 
@@ -172,7 +182,7 @@ PlasmoidItem {
         ignoreUnknownSignals: true
 
         function onXChanged() {
-            root.readPanelWindow();
+            panelMoveTimer.restart();
         }
         function onYChanged() {
             root.readPanelWindow();
@@ -218,8 +228,10 @@ PlasmoidItem {
     // Launches still bouncing, as launcher URL -> start time in ms. Replaced
     // as a whole on every change, so bindings that read it update.
     property var bouncing: ({})
-    // The task the context menu was opened for: its row, launcher URL and
-    // whether it has windows and is pinned.
+    // The task the context menu was opened for: its index, launcher URL,
+    // whether it has windows, or several, and whether it is pinned. The index
+    // is persistent: rows shift when another app closes while the menu is
+    // open, and Close closed the neighbor.
     property var menuTask: null
 
     // Where a task's slot starts in the rest layout.
@@ -301,13 +313,33 @@ PlasmoidItem {
     function openTaskMenu(item, row, model) {
         const url = model.LauncherUrlWithoutIcon;
         menuTask = {
-            row,
+            index: tasksModel.makePersistentModelIndex(row),
             url,
             hasWindow: model.IsWindow === true,
+            hasSeveral: model.IsGroupParent === true,
             pinned: tasksModel.launcherPosition(url) !== -1,
         };
         taskMenu.visualParent = item;
         taskMenu.openRelative();
+    }
+
+    // An app with several windows is one group row. TasksModel ignores a
+    // request to activate it, and minimizes all its windows when asked to
+    // toggle it, so a click goes to one of the windows instead.
+    function activateGroup(row) {
+        const windows = [];
+        for (let i = 0; i < tasksModel.rowCount(tasksModel.makeModelIndex(row)); ++i) {
+            const index = tasksModel.makeModelIndex(row, i);
+            windows.push({
+                active: tasksModel.data(index, TaskManager.AbstractTasksModel.IsActive) === true,
+                // A Date, or undefined for a window that was never in front.
+                lastActivated: Number(tasksModel.data(index, TaskManager.AbstractTasksModel.LastActivated) ?? NaN),
+                stacking: tasksModel.data(index, TaskManager.AbstractTasksModel.StackingOrder),
+            });
+        }
+        const next = Windows.windowToActivate(windows);
+        if (next !== -1)
+            tasksModel.requestActivate(tasksModel.makeModelIndex(row, next));
     }
 
     preferredRepresentation: fullRepresentation
@@ -381,6 +413,13 @@ PlasmoidItem {
         placesReader.connectSource("cat \"" + placesFile + "\"");
     }
 
+    // Looks the row up on the click: rows may shift while the stack is open.
+    function openFileManager() {
+        const index = tasksModel.makeModelIndex(fileManagerRow);
+        tasksModel.requestActivate(index);
+        startBounce(tasksModel.data(index, TaskManager.AbstractTasksModel.LauncherUrlWithoutIcon).toString());
+    }
+
     function openStack(xbel) {
         const row = stackRow;
         const index = tasksModel.makeModelIndex(row);
@@ -395,10 +434,7 @@ PlasmoidItem {
             // Translated through Dolphin's own "Open %1".
             name: i18ndc("dolphin", "@action:inmenu Tools", "Open %1", appName),
             icon: "folder-open",
-            action: () => {
-                tasksModel.requestActivate(index);
-                startBounce(tasksModel.data(index, TaskManager.AbstractTasksModel.LauncherUrlWithoutIcon).toString());
-            },
+            action: () => openFileManager(),
         });
         // In the stack's window, which covers the dock's screen.
         stackOrigin = Qt.point(restOrigin.x + taskLeft(row) + slot / 2 - Screen.virtualX,
@@ -442,7 +478,7 @@ PlasmoidItem {
             text: i18n("New Window")
             icon: "window-new"
             visible: root.menuTask?.hasWindow === true
-            onClicked: tasksModel.requestNewInstance(tasksModel.makeModelIndex(root.menuTask.row))
+            onClicked: tasksModel.requestNewInstance(root.menuTask.index)
         }
         PlasmaExtras.MenuItem {
             text: root.menuTask?.pinned ? i18n("Unpin from Dock") : i18n("Pin to Dock")
@@ -459,10 +495,10 @@ PlasmoidItem {
             visible: root.menuTask?.hasWindow === true
         }
         PlasmaExtras.MenuItem {
-            text: i18n("Close")
+            text: root.menuTask?.hasSeveral ? i18n("Close All Windows") : i18n("Close")
             icon: "window-close"
             visible: root.menuTask?.hasWindow === true
-            onClicked: tasksModel.requestClose(tasksModel.makeModelIndex(root.menuTask.row))
+            onClicked: tasksModel.requestClose(root.menuTask.index)
         }
     }
 
@@ -540,6 +576,10 @@ PlasmoidItem {
                         root.toggleStack(hit.index);
                         return;
                     }
+                    if (hit.model.IsGroupParent === true) {
+                        root.activateGroup(hit.index);
+                        return;
+                    }
                     const index = tasksModel.makeModelIndex(hit.index);
                     if (hit.model.IsActive === true)
                         tasksModel.requestToggleMinimized(index);
@@ -552,6 +592,8 @@ PlasmoidItem {
 
             TapHandler {
                 acceptedButtons: Qt.RightButton
+                // Buttons do not count for touch: every tap opened the menu.
+                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
                 // Grab the press, so the panel does not open its own menu, and
                 // open ours once the grab is released, as Plasma's task
                 // manager does.
@@ -570,6 +612,10 @@ PlasmoidItem {
                     Qt.rect(Math.round(origin.x), Math.round(origin.y), width, height), hit);
             }
 
+            // A window that joins the app's group has no such place yet.
+            readonly property int windowCount: model.ChildCount ?? 0
+
+            onWindowCountChanged: publishGeometry()
             onIndexChanged: publishGeometry()
             Component.onCompleted: publishGeometry()
 
