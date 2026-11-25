@@ -592,6 +592,8 @@ PlasmoidItem {
 
             TapHandler {
                 acceptedButtons: Qt.RightButton
+                // Buttons do not count for touch: every tap opened the menu.
+                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
                 // Grab the press, so the panel does not open its own menu, and
                 // open ours once the grab is released, as Plasma's task
                 // manager does.
